@@ -664,7 +664,10 @@ const sanitizeAddr = s => /^0x[0-9a-fA-F]{40}$/.test(s) || (s.startsWith('0x') &
 const sanitizeNum = (v, min, max) => { const n = parseFloat(v); return isNaN(n) ? min : Math.min(Math.max(n, min), max); };
 const sanitizeInt = (v, min, max) => { const n = parseInt(v, 10); return isNaN(n) ? min : Math.min(Math.max(n, min), max); };
 const allowStdClass = c => ({ sd:1, '721':1, mf:1, tw:1, cx:1 }[c] ? c : '721');
-const allowRpcRole = r => ({ primary:1, blast:1, private:1 }[(r||'private').toLowerCase()] ? (r||'private').toLowerCase() : 'private');
+const allowRpcRole = r => {
+  const roleStr = String(r || 'private').toLowerCase();
+  return { primary:1, blast:1, private:1 }[roleStr] ? roleStr : 'private';
+};
 const allowClTag = t => ({ new:1, sec:1, fix:1 }[t] ? t : 'new');
 const isHttpsUrl = u => { try { const p = new URL(u); return p.protocol === 'https:'; } catch { return false; } };
 const clip = (s, n) => String(s || '').slice(0, n);
@@ -2693,23 +2696,42 @@ function guideToggle(id) {
 }
 
 // BOOT
-document.addEventListener('DOMContentLoaded', async () => {
+document.addEventListener('DOMContentLoaded', () => {
   loadState();
-  if (!RV3_API.token()) RV3_API.setToken('rv3_local_dev_change_this');
-  await apiConnect();
-  if (API_ONLINE) {
-    await syncEnvRpcs();
-    await syncFromServer();
-    try { await RV3_API.settingsStatus(); } catch { /* */ }
-    addNotif('Backend online', 'Worker connected · edit .env for API keys', 'info');
-  } else {
-    addNotif('Backend offline', 'Run npm start in the RV3 folder', 'warn');
-  }
   go('overview');
   updateSystemStatus();
   updateBadges();
   fetchEthPrice();
   renderNotifPanel();
+
+  if (!RV3_API.token()) RV3_API.setToken('rv3_local_dev_change_this');
+
+  apiConnect().then(async () => {
+    if (API_ONLINE) {
+      await syncEnvRpcs();
+      await syncFromServer();
+      try { await RV3_API.settingsStatus(); } catch { /* */ }
+      addNotif('Backend online', 'Worker connected · edit .env for API keys', 'info');
+    } else {
+      addNotif('Backend offline', 'Run npm start in the RV3 folder', 'warn');
+    }
+    updateSystemStatus();
+    updateBadges();
+    fetchEthPrice();
+    renderNotifPanel();
+    
+    // Refresh current view if we are on a page that relies on API data
+    const act = document.querySelector('.ni.act');
+    if (act) {
+      const page = act.id.replace('nav-', '');
+      if (['overview', 'settings', 'wallets'].includes(page)) {
+        go(page);
+      }
+    }
+  }).catch(() => {
+    addNotif('Backend offline', 'Run npm start in the RV3 folder', 'warn');
+    updateSystemStatus();
+  });
   setInterval(async () => {
     if (API_ONLINE) {
       await syncFromServer();
