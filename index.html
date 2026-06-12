@@ -716,8 +716,8 @@ async function syncFromServer() {
 function apiStatusRows() {
   const svc = RV3_API.services;
   if (!svc) return '<div style="font-size:12px;color:var(--text3)">Backend offline — run <code>npm start</code></div>';
-  const rows = typeof svc.opensea === 'object'
-    ? Object.values(svc)
+  const rows = (svc.opensea && typeof svc.opensea === 'object')
+    ? Object.values(svc).filter(s => s && typeof s === 'object')
     : [
         { configured: svc.opensea, label: 'OpenSea API' },
         { configured: svc.etherscan, label: 'Etherscan API' },
@@ -1538,7 +1538,7 @@ function settingsSave() {
 
 function rpcRowHTML(r) {
   return `<div class="rpc-row">
-    <div class="rpc-fire${r.active?'active':''}"></div>
+    <div class="rpc-fire${r.active?' active':''}"></div>
     <span class="rpc-name">${esc(r.name)}</span>
     <span class="rpc-role rr-${allowRpcRole(r.role)}">${esc(r.role||'Private')}</span>
     <span class="rpc-url">${esc(r.url)}</span>
