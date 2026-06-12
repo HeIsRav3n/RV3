@@ -1,0 +1,118 @@
+// RV3 API client — talks to local Express backend (same origin when using npm start)
+const RV3_API = {
+  online: false,
+  health: null,
+  services: null,
+
+  token() {
+    try { return sessionStorage.getItem('rv3_api_token') || ''; } catch { return ''; }
+  },
+  setToken(t) {
+    try { sessionStorage.setItem('rv3_api_token', t || ''); } catch { /* */ }
+  },
+
+  async request(path, opts = {}) {
+    const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+    const tok = this.token();
+    if (tok) headers['X-RV3-Token'] = tok;
+    const res = await fetch(`/api${path}`, { ...opts, headers });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || res.statusText || 'API error');
+    return data;
+  },
+
+  async health() {
+    const data = await this.request('/health');
+    this.online = true;
+    this.health = data;
+    this.services = data.services;
+    return data;
+  },
+
+  async settingsStatus() {
+    const data = await this.request('/settings/status');
+    this.services = data.services;
+    return data;
+  },
+
+  async detect(input, checkEligibility = true) {
+    const data = await this.request('/detect', {
+      method: 'POST',
+      body: JSON.stringify({ input, checkEligibility }),
+    });
+    return data.result;
+  },
+
+  async checkEligibility(openseaSlug, phaseIndex, phaseUuid, walletIds) {
+    const data = await this.request('/detect/eligibility', {
+      method: 'POST',
+      body: JSON.stringify({ openseaSlug, phaseIndex, phaseUuid, walletIds }),
+    });
+    return data;
+  },
+
+  async ethPrice() {
+    const data = await this.request('/price/eth');
+    return data.usd;
+  },
+
+  async envRpcs() {
+    return this.request('/rpc/env');
+  },
+
+  async pingRpc(url, id) {
+    const body = id ? { id } : { url };
+    return this.request('/rpc/ping', { method: 'POST', body: JSON.stringify(body) });
+  },
+
+  async listWallets() {
+    return this.request('/wallets');
+  },
+
+  async importWallet(name, privateKey, balance) {
+    return this.request('/wallets/import', {
+      method: 'POST',
+      body: JSON.stringify({ name, privateKey, balance }),
+    });
+  },
+
+  async deleteWallet(id) {
+    return this.request(`/wallets/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+
+  async listTasks() {
+    return this.request('/tasks');
+  },
+
+  async createTask(task) {
+    return this.request('/tasks', { method: 'POST', body: JSON.stringify(task) });
+  },
+
+  async cancelTask(id) {
+    return this.request(`/tasks/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+
+  async history() {
+    return this.request('/history');
+  },
+
+  async testNotify() {
+    return this.request('/notify/test', { method: 'POST', body: '{}' });
+  },
+
+  async refreshWallets() {
+    return this.request('/wallets/refresh', { method: 'POST', body: '{}' });
+  },
+
+  async createFundOp(op) {
+    return this.request('/fund', { method: 'POST', body: JSON.stringify(op) });
+  },
+
+  async createSweepOp(op) {
+    return this.request('/sweep', { method: 'POST', body: JSON.stringify(op) });
+  },
+
+  async pnl() {
+    return this.request('/pnl');
+  },
+};

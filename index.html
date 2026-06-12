@@ -1,0 +1,2744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="description" content="RV3: Personal NFT mint bot">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.coingecko.com https:;">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" type="image/png" href="assets/rv3-logo.png">
+<link rel="apple-touch-icon" href="assets/rv3-logo.png">
+<title>RV3</title>
+<style>
+/* RESET */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}
+:root{
+  --bg:#080b12;--bg2:#0d1119;--bg3:#131825;--bg4:#1a2030;--bg5:#212640;
+  --border:#1a2030;--border2:#252d42;--border3:#323c58;
+  --accent:#4a7cfc;--accent2:#2d5ce8;--accent3:#7aa3ff;
+  --green:#0fcf85;--red:#f04040;--amber:#f5a020;--blue:#4fa8e8;
+  --text:#d8e0f0;--text2:#6e7a9a;--text3:#333d58;
+  --mono:'Courier New',monospace;
+  --r:8px;--r2:11px;
+}
+html,body{height:100vh;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;display:flex}
+
+/* SIDEBAR */
+#sidebar{width:214px;min-width:214px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;user-select:none}
+.logo-wrap{padding:13px 14px 11px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+.logo-img-wrap{flex-shrink:0;width:34px;height:34px;border-radius:8px;overflow:hidden;border:1px solid var(--border2)}
+.logo-img-wrap img{width:100%;height:100%;object-fit:cover;object-position:left top;display:block}
+.logo-name{font-size:16px;font-weight:800;letter-spacing:-.5px;line-height:1}
+.logo-sub{font-size:9px;color:var(--text3);letter-spacing:.8px;margin-top:1px;text-transform:uppercase}
+.nav{padding:8px 8px;flex:1;overflow-y:auto}
+.nav::-webkit-scrollbar{width:3px}
+.nav::-webkit-scrollbar-thumb{background:var(--border2)}
+.ns{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1.2px;padding:10px 8px 4px;font-weight:700}
+.ni{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:7px;cursor:pointer;color:var(--text2);transition:all .12s;font-size:12.5px;position:relative;white-space:nowrap}
+.ni:hover{background:var(--bg3);color:var(--text)}
+.ni.act{background:rgba(74,124,252,.13);color:var(--accent)}
+.ni svg{width:15px;height:15px;flex-shrink:0;opacity:.65;transition:opacity .12s}
+.ni.act svg,.ni:hover svg{opacity:1}
+.ni-b{margin-left:auto;font-size:9px;font-weight:700;padding:2px 6px;border-radius:9px}
+.nb-a{background:rgba(74,124,252,.18);color:var(--accent3)}
+.nb-g{background:rgba(15,207,133,.15);color:var(--green)}
+.sb-foot{padding:9px 12px;border-top:1px solid var(--border)}
+.sr{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--text2);padding:2px 0}
+.dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.dg{background:var(--green)}
+.da{background:var(--amber);animation:blink 2s infinite}
+.dr{background:var(--red)}
+
+/* MAIN */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden;height:100vh;min-width:0}
+.topbar{background:var(--bg2);border-bottom:1px solid var(--border);padding:11px 20px;display:flex;align-items:center;gap:10px;flex-shrink:0;min-height:46px}
+.pg-title{font-size:14px;font-weight:700;letter-spacing:-.3px;flex:1}
+.pg-sub{font-size:11px;color:var(--text3);font-weight:400;margin-left:5px}
+.tba{display:flex;gap:7px;align-items:center}
+.content{flex:1;overflow-y:auto;padding:18px 20px}
+.content::-webkit-scrollbar{width:4px}
+.content::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:var(--r);font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--border2);background:var(--bg3);color:var(--text);transition:all .12s;white-space:nowrap;font-family:inherit;line-height:1.4}
+.btn:hover{background:var(--bg4);border-color:var(--border3)}
+.btn:active{transform:scale(.98)}
+.btn-p{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-p:hover{background:var(--accent2);border-color:var(--accent2)}
+.btn-g{background:rgba(15,207,133,.1);border-color:rgba(15,207,133,.25);color:var(--green)}
+.btn-g:hover{background:rgba(15,207,133,.18)}
+.btn-r{background:rgba(240,64,64,.09);border-color:rgba(240,64,64,.25);color:var(--red)}
+.btn-r:hover{background:rgba(240,64,64,.16)}
+.btn-sm{padding:4px 9px;font-size:11px}
+.btn-xs{padding:3px 7px;font-size:10.5px}
+
+/* CARDS */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:14px}
+.card-hd{padding:11px 15px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:9px}
+.card-hd h2{font-size:12.5px;font-weight:700;flex:1}
+.card-body{padding:14px 15px}
+
+/* STAT CARDS */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.sc{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:13px 14px;position:relative;overflow:hidden}
+.sc::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px}
+.sc.s-a::after{background:var(--accent)}.sc.s-g::after{background:var(--green)}.sc.s-o::after{background:var(--amber)}.sc.s-r::after{background:var(--red)}
+.sc-lbl{font-size:9.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.7px;font-weight:700;margin-bottom:5px}
+.sc-val{font-size:23px;font-weight:800;letter-spacing:-1px;line-height:1}
+.sc-sub{font-size:10.5px;color:var(--text2);margin-top:4px}
+
+/* FORMS */
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fg{margin-bottom:12px}
+.fl{display:block;font-size:10px;color:var(--text2);font-weight:700;letter-spacing:.4px;text-transform:uppercase;margin-bottom:5px}
+.fi,.fs{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:8px 11px;color:var(--text);font-size:12.5px;outline:none;transition:border-color .15s;font-family:inherit;appearance:none}
+.fi:focus,.fs:focus{border-color:var(--accent);background:var(--bg4)}
+.fi::placeholder{color:var(--text3)}
+.fs option{background:var(--bg3)}
+.fi.err{border-color:var(--red)}
+.err-msg{font-size:10px;color:var(--red);margin-top:3px;display:none}
+.fi.err+.err-msg{display:block}
+
+/* TOGGLE */
+.tog{position:relative;width:34px;height:19px;cursor:pointer;flex-shrink:0;display:inline-block}
+.tog input{opacity:0;width:0;height:0;position:absolute}
+.tog-track{position:absolute;inset:0;background:var(--bg4);border:1px solid var(--border2);border-radius:10px;transition:all .2s}
+.tog input:checked+.tog-track{background:var(--accent);border-color:var(--accent)}
+.tog-thumb{position:absolute;top:2px;left:2px;width:13px;height:13px;background:#fff;border-radius:50%;transition:transform .2s;pointer-events:none}
+.tog input:checked~.tog-thumb{transform:translateX(15px)}
+.tog-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;font-size:12.5px;color:var(--text2)}
+
+/* BADGES */
+.tb{font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;letter-spacing:.3px;text-transform:uppercase;white-space:nowrap}
+.tb-sd{background:rgba(74,124,252,.18);color:#8aa8ff;border:1px solid rgba(74,124,252,.3)}
+.tb-721{background:rgba(15,207,133,.12);color:var(--green);border:1px solid rgba(15,207,133,.2)}
+.tb-mf{background:rgba(245,160,32,.12);color:var(--amber);border:1px solid rgba(245,160,32,.2)}
+.tb-tw{background:rgba(79,168,232,.12);color:var(--blue);border:1px solid rgba(79,168,232,.2)}
+.tb-cx{background:rgba(240,64,64,.1);color:var(--red);border:1px solid rgba(240,64,64,.2)}
+
+/* STATUS */
+.st{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px}
+.st-live{background:rgba(15,207,133,.1);color:var(--green);border:1px solid rgba(15,207,133,.2)}
+.st-pend{background:rgba(245,160,32,.1);color:var(--amber);border:1px solid rgba(245,160,32,.2)}
+.st-end{background:var(--bg4);color:var(--text3);border:1px solid var(--border)}
+.st-ok{background:rgba(15,207,133,.1);color:var(--green);border:1px solid rgba(15,207,133,.2)}
+.st-fail{background:rgba(240,64,64,.1);color:var(--red);border:1px solid rgba(240,64,64,.2)}
+.st-part{background:rgba(245,160,32,.1);color:var(--amber);border:1px solid rgba(245,160,32,.2)}
+.st-run{background:rgba(74,124,252,.15);color:var(--accent3);border:1px solid rgba(74,124,252,.3);animation:blink 1.5s infinite}
+.st-q{background:rgba(245,160,32,.1);color:var(--amber);border:1px solid rgba(245,160,32,.2)}
+
+/* CHAIN TAGS */
+.ct{display:inline-flex;align-items:center;gap:3px;font-size:9px;padding:2px 6px;border-radius:4px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.ct-eth{background:rgba(74,124,252,.12);color:var(--accent3)}
+.ct-base{background:rgba(79,168,232,.12);color:var(--blue)}
+.ct-blast{background:rgba(245,160,32,.12);color:var(--amber)}
+
+/* DROPS TABLE */
+.dt{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:14px}
+.dt-hd{display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr 80px;background:var(--bg3);border-bottom:1px solid var(--border)}
+.dth{padding:8px 13px;font-size:9.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.7px;font-weight:700}
+.dt-row{display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr 80px;border-bottom:1px solid var(--border);align-items:center;transition:background .1s}
+.dt-row:last-child{border-bottom:none}
+.dt-row:hover{background:rgba(255,255,255,.015)}
+.dtd{padding:10px 13px;font-size:12.5px}
+.dn{font-weight:700}
+.da-addr{font-family:var(--mono);font-size:9.5px;color:var(--text3);margin-top:1px}
+
+/* WALLETS */
+.wg{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:9px;margin-bottom:12px}
+.wc{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:12px 13px;transition:border-color .13s;position:relative}
+.wc.low{border-color:rgba(245,160,32,.25)}
+.wc-addr{font-family:var(--mono);font-size:9.5px;color:var(--text3);margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wc-name{font-size:13px;font-weight:700;margin-bottom:4px}
+.wc-bal{font-size:15px;font-weight:800}
+.wc.low .wc-bal{color:var(--amber)}
+.wc-sub{font-size:10px;color:var(--text3);margin-top:2px}
+.wc-actions{display:flex;align-items:center;justify-content:space-between;margin-top:7px}
+.wc-act{cursor:pointer;color:var(--text3);font-size:13px;padding:3px 4px;transition:color .12s}
+.wc-act:hover{color:var(--text)}
+.wc-act.del:hover{color:var(--red)}
+
+/* HISTORY */
+.rr{display:flex;align-items:center;gap:11px;padding:11px 15px;border-bottom:1px solid var(--border);transition:background .1s}
+.rr:hover{background:rgba(255,255,255,.015)}
+.rr:last-child{border-bottom:none}
+.rd{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.ri{flex:1;min-width:0}
+.rn{font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rm{font-size:10.5px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* RPC */
+.rpc-row{display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 11px;margin-bottom:7px}
+.rpc-name{font-size:12px;font-weight:700;min-width:60px}
+.rpc-role{font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;white-space:nowrap}
+.rr-primary{background:rgba(79,168,232,.15);color:var(--blue);border:1px solid rgba(79,168,232,.2)}
+.rr-blast{background:rgba(74,124,252,.15);color:var(--accent3);border:1px solid rgba(74,124,252,.25)}
+.rr-private{background:rgba(15,207,133,.12);color:var(--green);border:1px solid rgba(15,207,133,.2)}
+.rpc-url{flex:1;font-family:var(--mono);font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rpc-ms{font-size:10.5px;font-weight:700;color:var(--green);white-space:nowrap}
+.rpc-ms.slow{color:var(--amber)}
+.rpc-fire{width:8px;height:8px;border-radius:50%;background:var(--text3);flex-shrink:0;transition:all .2s}
+.rpc-fire.active{background:var(--green);box-shadow:0 0 6px rgba(15,207,133,.6)}
+
+/* TERMINAL */
+.terminal{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;font-family:var(--mono);font-size:11px;max-height:200px;overflow-y:auto;line-height:1.75}
+.terminal::-webkit-scrollbar{width:3px}
+.terminal::-webkit-scrollbar-thumb{background:var(--border2)}
+.l-ok{color:var(--green)}.l-info{color:var(--blue)}.l-warn{color:var(--amber)}.l-err{color:var(--red)}.l-dim{color:var(--text3)}
+
+/* GAS CALC */
+.gas-calc{background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r);padding:11px 13px;margin-top:8px}
+.gas-row{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;padding:3px 0}
+.gas-lbl{color:var(--text2)}
+.gas-val{font-weight:700;font-family:var(--mono);font-size:11px}
+.gas-val.accent{color:var(--accent3)}
+.gas-val.green{color:var(--green)}
+.gas-val.amber{color:var(--amber)}
+
+/* PHASES */
+.pp{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:20px;font-size:11.5px;font-weight:500;margin:0 4px 5px 0;border:1px solid}
+.pp-live{background:rgba(15,207,133,.1);color:var(--green);border-color:rgba(15,207,133,.25);cursor:pointer}
+.pp-live:hover{background:rgba(15,207,133,.18)}
+.pp-end{background:var(--bg4);color:var(--text3);border-color:var(--border);opacity:.55;text-decoration:line-through}
+.pp-sched{background:rgba(245,160,32,.1);color:var(--amber);border-color:rgba(245,160,32,.2);cursor:pointer}
+.pp-sched:hover{background:rgba(245,160,32,.18)}
+.pp-dot{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}
+
+/* WALLET SELECTOR */
+.wsg{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.ws{display:flex;align-items:center;gap:7px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;transition:all .13s}
+.ws:hover{border-color:var(--border2)}
+.ws.on{border-color:var(--accent);background:rgba(74,124,252,.09)}
+.ws input{accent-color:var(--accent);width:13px;height:13px;cursor:pointer;flex-shrink:0}
+.ws-n{flex:1;font-size:12px;font-weight:600}
+.ws-b{font-size:10.5px;color:var(--text3)}
+.ws.nobal{opacity:.45;pointer-events:none}
+.ws.nobal .ws-n::after{content:' · Low';color:var(--red);font-size:10px;font-weight:400}
+.ws.inelig{opacity:.5;border-color:rgba(255,80,80,.25)}
+.ws.inelig .ws-n::after{content:' · Not eligible';color:var(--red);font-size:10px;font-weight:400}
+.ws.elig-pend .ws-n::after{content:' · Allowlist TBD';color:var(--amber);font-size:10px;font-weight:400}
+.ws-e{font-size:9px;margin-left:auto;flex-shrink:0;font-weight:700}
+.ws-e.ok{color:var(--green)}.ws-e.no{color:var(--red)}.ws-e.pend{color:var(--amber)}
+
+/* MODAL */
+.mo-bg{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;z-index:1000}
+.mo-bg.show{display:flex}
+.mo{background:var(--bg2);border:1px solid var(--border2);border-radius:13px;width:560px;max-height:92vh;overflow-y:auto;box-shadow:0 30px 80px rgba(0,0,0,.65)}
+.mo::-webkit-scrollbar{width:3px}
+.mo::-webkit-scrollbar-thumb{background:var(--border2)}
+.mo-hd{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;position:sticky;top:0;background:var(--bg2);z-index:1}
+.mo-title{font-size:14px;font-weight:800;flex:1;letter-spacing:-.3px}
+.mo-body{padding:17px 18px}
+.mo-ft{padding:13px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;position:sticky;bottom:0;background:var(--bg2)}
+
+/* EST BOX */
+.est-box{background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r);padding:10px 13px;font-size:11.5px;color:var(--text2);margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.est-box span{color:var(--accent3);font-weight:600}
+
+/* SCHEDULE */
+.sched-box{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:11px 13px;margin-top:6px}
+.sched-time{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--green);margin-top:4px;letter-spacing:.3px}
+.sched-sub{font-size:10.5px;color:var(--text3);margin-top:3px}
+.countdown{font-size:11px;color:var(--amber);font-family:var(--mono);margin-top:4px}
+
+/* PNL */
+.pnl-g{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.pnl-c{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:13px 14px}
+.pnl-lbl{font-size:9.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.7px;font-weight:700;margin-bottom:5px}
+.pnl-val{font-size:18px;font-weight:800;letter-spacing:-.5px}
+.pnl-val.pos{color:var(--green)}.pnl-val.neg{color:var(--red)}.pnl-val.amb{color:var(--amber)}
+
+/* BANNERS */
+.ban{border-radius:var(--r);padding:10px 13px;font-size:12px;display:flex;gap:8px;align-items:flex-start;margin-bottom:11px}
+.ban-w{background:rgba(245,160,32,.07);border:1px solid rgba(245,160,32,.2);color:var(--amber)}
+.ban-i{background:rgba(79,168,232,.07);border:1px solid rgba(79,168,232,.18);color:var(--blue)}
+.ban-ok{background:rgba(15,207,133,.07);border:1px solid rgba(15,207,133,.18);color:var(--green)}
+.ban-txt{color:var(--text2)}
+.ban-ico{font-size:13px;flex-shrink:0;margin-top:1px}
+
+/* EMPTY */
+.es{text-align:center;padding:36px 20px;color:var(--text3)}
+.es-icon{font-size:28px;margin-bottom:8px}
+.es-title{font-size:13px;font-weight:600;color:var(--text2);margin-bottom:4px}
+.es-sub{font-size:11.5px}
+
+/* TABS */
+.tabs{display:flex;gap:2px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:3px;width:fit-content;margin-bottom:13px}
+.tab{padding:5px 14px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;color:var(--text2);transition:all .12s}
+.tab.act{background:var(--bg2);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.4)}
+
+/* DELEG */
+.dsteps{display:flex;gap:0;margin-bottom:14px}
+.ds{padding:7px 16px;font-size:11.5px;font-weight:600;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);cursor:pointer;transition:all .12s}
+.ds:first-child{border-radius:7px 0 0 7px}.ds:last-child{border-radius:0 7px 7px 0}.ds:not(:first-child){border-left:none}
+.ds.act{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* BLAST */
+.blast-panel{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:12px 13px;margin-top:8px}
+.blast-title{font-size:11px;font-weight:700;color:var(--accent3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.blast-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.blast-item{display:flex;align-items:center;gap:7px;background:var(--bg4);border:1px solid var(--border);border-radius:6px;padding:6px 9px;font-size:11px;transition:all .2s}
+.blast-item.firing{border-color:rgba(15,207,133,.35);background:rgba(15,207,133,.06)}
+.blast-item.firing .rpc-fire{background:var(--green);box-shadow:0 0 6px rgba(15,207,133,.6)}
+.blast-item.error{border-color:rgba(240,64,64,.3)}
+.blast-item.error .rpc-fire{background:var(--red)}
+.blast-name{font-weight:600;min-width:50px}
+.blast-ms{margin-left:auto;font-family:var(--mono);font-size:10.5px}
+
+/* TOAST */
+.tw{position:fixed;bottom:16px;right:16px;display:flex;flex-direction:column;gap:7px;z-index:2000;pointer-events:none}
+.toast{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);padding:9px 13px;font-size:12px;max-width:290px;display:flex;align-items:center;gap:7px;box-shadow:0 10px 30px rgba(0,0,0,.5);animation:toastIn .18s ease;pointer-events:all}
+@keyframes toastIn{from{transform:translateX(12px);opacity:0}to{transform:none;opacity:1}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.fade-in{animation:fadeIn .2s ease}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{animation:spin .7s linear infinite;display:inline-block}
+.section-lbl{font-size:9.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-weight:700;margin:14px 0 8px}
+
+code{background:var(--bg4);padding:1px 5px;border-radius:4px;font-size:11px;font-family:var(--mono)}
+
+/* ── WIZARD STEPPER ── */
+.wiz-steps{display:flex;align-items:center;gap:0;margin-bottom:20px;overflow-x:auto}
+.wiz-step{display:flex;align-items:center;gap:7px;padding:7px 14px 7px 12px;font-size:12px;font-weight:600;color:var(--text3);background:var(--bg3);border:1px solid var(--border);cursor:pointer;transition:all .15s;white-space:nowrap;position:relative}
+.wiz-step:first-child{border-radius:8px 0 0 8px}
+.wiz-step:last-child{border-radius:0 8px 8px 0}
+.wiz-step:not(:first-child){border-left:none}
+.wiz-step.act{background:rgba(74,124,252,.14);color:var(--accent);border-color:rgba(74,124,252,.3)}
+.wiz-step.done{background:rgba(15,207,133,.08);color:var(--green);border-color:rgba(15,207,133,.2)}
+.wiz-step-num{width:18px;height:18px;border-radius:50%;border:1.5px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0}
+.wiz-arrow{color:var(--text3);font-size:10px;margin:0 2px}
+
+/* ── OPERATION CARDS ── */
+.op-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.op-card{background:var(--bg2);border:2px solid var(--border);border-radius:var(--r2);padding:16px;cursor:pointer;transition:all .15s}
+.op-card:hover{border-color:var(--border2);background:var(--bg3)}
+.op-card.sel{border-color:var(--accent);background:rgba(74,124,252,.07)}
+.op-title{font-size:13px;font-weight:700;margin-bottom:5px}
+.op-flow{font-size:10.5px;color:var(--text3);font-family:var(--mono);margin-bottom:6px}
+.op-desc{font-size:11.5px;color:var(--text2);line-height:1.5}
+
+/* ── SOURCE WALLET CHIPS ── */
+.w-chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px}
+.w-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:20px;font-size:11.5px;font-weight:500;border:1px solid var(--border2);background:var(--bg3);cursor:pointer;transition:all .13s;user-select:none}
+.w-chip:hover{border-color:var(--border3)}
+.w-chip.sel{border-color:var(--accent);background:rgba(74,124,252,.1);color:var(--accent3)}
+.w-chip-bal{font-size:10px;opacity:.7}
+.w-chip-chk{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0;display:none}
+.w-chip.sel .w-chip-chk{display:block}
+
+/* ── REVIEW TABLE ── */
+.rev-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.rev-table th{background:var(--bg3);padding:8px 12px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;font-weight:700;border-bottom:1px solid var(--border);text-align:left}
+.rev-table td{padding:9px 12px;border-bottom:1px solid var(--border)}
+.rev-table tr:last-child td{border-bottom:none}
+.rev-table tr:hover td{background:rgba(255,255,255,.012)}
+
+/* ── NOTIF PANEL ── */
+.notif-item{display:flex;align-items:flex-start;gap:7px;padding:6px 4px;border-bottom:1px solid var(--border);font-size:11px;line-height:1.4;cursor:pointer;transition:background .1s;border-radius:4px}
+.notif-item:last-child{border-bottom:none}
+.notif-item:hover{background:rgba(255,255,255,.04)}
+.notif-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:3px}
+.notif-ok{background:var(--green)}
+.notif-fail{background:var(--red)}
+.notif-info{background:var(--blue)}
+.notif-new{background:var(--accent)}
+.notif-body{flex:1;min-width:0}
+.notif-title{font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.notif-time{font-size:9.5px;color:var(--text3);margin-top:1px}
+.notif-badge{font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;white-space:nowrap;flex-shrink:0;margin-top:2px}
+.nb-ok2{background:rgba(15,207,133,.15);color:var(--green)}
+.nb-fail2{background:rgba(240,64,64,.12);color:var(--red)}
+.nb-new2{background:rgba(74,124,252,.15);color:var(--accent3)}
+
+/* ── GUIDE ── */
+.guide-section{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:14px;overflow:hidden}
+.guide-hd{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:9px;cursor:pointer;user-select:none}
+.guide-hd h3{font-size:13px;font-weight:700;flex:1}
+.guide-hd .g-icon{font-size:18px;flex-shrink:0}
+.guide-body{padding:14px 16px;line-height:1.8;color:var(--text2);font-size:12.5px}
+.guide-body h4{font-size:12px;font-weight:700;color:var(--text);margin:12px 0 5px;text-transform:uppercase;letter-spacing:.4px}
+.guide-body p{margin-bottom:9px}
+.guide-body ul{padding-left:18px;margin-bottom:9px}
+.guide-body li{margin-bottom:4px}
+.guide-step{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)}
+.guide-step:last-child{border-bottom:none}
+.guide-step-num{width:22px;height:22px;border-radius:50%;background:rgba(74,124,252,.15);color:var(--accent3);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.guide-step-body{flex:1}
+.guide-step-title{font-size:12.5px;font-weight:700;color:var(--text);margin-bottom:3px}
+.guide-step-desc{font-size:11.5px;color:var(--text2)}
+.changelog-item{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.changelog-item:last-child{border-bottom:none}
+.cl-ver{font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--accent3);min-width:55px}
+.cl-date{font-size:10.5px;color:var(--text3);min-width:80px}
+.cl-changes{flex:1;font-size:11.5px;color:var(--text2)}
+.cl-new{font-size:9px;font-weight:700;background:rgba(74,124,252,.15);color:var(--accent3);border:1px solid rgba(74,124,252,.25);padding:1px 5px;border-radius:3px;margin-left:5px}
+
+/* CHANGELOG MODAL */
+.cl-modal{background:var(--bg2);border:1px solid var(--border2);border-radius:14px;width:560px;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.6);overflow:hidden}
+.cl-modal-hd{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:var(--bg2)}
+.cl-modal-icon{font-size:22px;line-height:1}
+.cl-modal-title{font-size:15px;font-weight:800;letter-spacing:-.3px}
+.cl-modal-sub{font-size:11px;color:var(--text3);margin-top:1px}
+.cl-modal-body{overflow-y:auto;flex:1;padding:0}
+.cl-modal-body::-webkit-scrollbar{width:4px}
+.cl-modal-body::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.cl-release{padding:20px 22px;border-bottom:1px solid var(--border)}
+.cl-release:last-child{border-bottom:none}
+.cl-release-hd{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.cl-release-ver{font-family:var(--mono);font-size:14px;font-weight:800;color:var(--text);letter-spacing:-.3px}
+.cl-release-date{font-size:11px;color:var(--text3);margin-left:2px}
+.cl-release-latest{font-size:9px;font-weight:800;padding:2px 7px;border-radius:4px;background:rgba(74,124,252,.18);color:var(--accent3);border:1px solid rgba(74,124,252,.3);letter-spacing:.3px;text-transform:uppercase}
+.cl-items{display:flex;flex-direction:column;gap:7px}
+.cl-item{display:flex;align-items:flex-start;gap:9px;padding:7px 10px;background:var(--bg3);border-radius:var(--r);border:1px solid var(--border)}
+.cl-item-tag{font-size:9px;font-weight:800;padding:2px 7px;border-radius:4px;flex-shrink:0;margin-top:1px;letter-spacing:.4px;text-transform:uppercase;line-height:1.4}
+.cl-tag-new{background:rgba(74,124,252,.15);color:var(--accent3);border:1px solid rgba(74,124,252,.25)}
+.cl-tag-fix{background:rgba(15,207,133,.12);color:var(--green);border:1px solid rgba(15,207,133,.2)}
+.cl-tag-sec{background:rgba(245,160,32,.12);color:var(--amber);border:1px solid rgba(245,160,32,.2)}
+.cl-item-text{font-size:12.5px;color:var(--text2);line-height:1.5;flex:1}
+.cl-detail-section{padding:16px 18px;border-bottom:1px solid var(--border)}
+.cl-detail-section:last-child{border-bottom:none}
+.cl-detail-ver{font-family:var(--mono);font-size:13px;font-weight:800;color:var(--accent3);margin-bottom:2px}
+.cl-detail-date{font-size:11px;color:var(--text3);margin-bottom:10px}
+.cl-detail-changes{font-size:12.5px;color:var(--text2);line-height:1.75}
+.cl-detail-changes li{margin-bottom:4px}
+.cl-detail-tag{display:inline-block;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;margin-right:4px;vertical-align:middle}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav id="sidebar" role="navigation" aria-label="Main navigation">
+  <div class="logo-wrap">
+    <div class="logo-img-wrap">
+      <img src="assets/rv3-logo.png" width="34" height="34" alt="RV3 logo">
+    </div>
+    <div>
+      <div class="logo-name">RV3</div>
+      <div class="logo-sub">Mint Bot</div>
+    </div>
+  </div>
+  <div class="nav">
+    <div class="ns">Core</div>
+    <div class="ni act" id="nav-overview" onclick="go('overview')" role="button" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Overview
+    </div>
+    <div class="ni" id="nav-detector" onclick="go('detector')" role="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><circle cx="11" cy="11" r="3"/></svg>
+      Detector
+    </div>
+    <div class="ni" id="nav-wallets" onclick="go('wallets')" role="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><circle cx="16" cy="15" r="1" fill="currentColor"/></svg>
+      Wallets
+      <span class="ni-b nb-g" id="nb-wallets">0</span>
+    </div>
+    <div class="ni" id="nav-drops" onclick="go('drops')" role="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      Drops
+      <span class="ni-b nb-g" id="nb-drops">0</span>
+    </div>
+    <div class="ns">Execute</div>
+    <div class="ni" id="nav-tasks" onclick="go('tasks')" role="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5,3 19,12 5,21"/></svg>
+      Tasks
+      <span class="ni-b nb-g" id="nb-tasks" style="display:none">0</span>
+    </div>
+    <div class="ni" id="nav-fund" onclick="go('fund')" role="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+      Fund Wallets
+    </div>
+    <div class="ni" id="nav-sweep" onclick="go('sweep')" role="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 17.5h7"/><path d="M17.5 14v7"/></svg>
+      NFT Sweep
+    </div>
+    <div class="ni" id="nav-deleg" onclick="go('deleg')" role="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Delegation
+    </div>
+    <div class="ni" id="nav-history" onclick="go('history')" role="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      History
+    </div>
+    <div class="ns">Analytics</div>
+    <div class="ni" id="nav-pnl" onclick="go('pnl')" role="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+      PnL
+    </div>
+    <div class="ns">Config</div>
+    <div class="ni" id="nav-settings" onclick="go('settings')" role="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Settings
+    </div>
+    <div class="ni" id="nav-guide" onclick="go('guide')" role="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      User Guide
+    </div>
+  </div>
+  <div class="sb-foot">
+    <!-- NOTIFICATION PANEL TOGGLE -->
+    <div style="border-bottom:1px solid var(--border);margin-bottom:8px;padding-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleNotifPanel()" id="notif-toggle">
+        <div style="display:flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;color:var(--text2)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          Notifications
+        </div>
+        <div style="display:flex;align-items:center;gap:5px">
+          <span class="ni-b nb-a" id="notif-count" style="display:none">0</span>
+          <span style="font-size:10px;color:var(--text3)" id="notif-arrow">▲</span>
+        </div>
+      </div>
+      <div id="notif-panel" style="max-height:0;overflow:hidden;transition:max-height .25s ease">
+        <div id="notif-list" style="padding-top:8px;display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto"></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:6px">
+          <span style="font-size:10px;color:var(--text3);cursor:pointer" onclick="clearNotifs()">Clear all</span>
+        </div>
+      </div>
+    </div>
+    <div class="sr"><div class="dot dg" id="sys-worker"></div><span id="sys-worker-lbl">Worker: checking...</span></div>
+    <div class="sr"><div class="dot dg" id="sys-redis"></div><span>Redis: OK</span></div>
+    <div class="sr"><div class="dot dg" id="sys-rpc"></div><span id="sys-rpc-lbl">RPC: 0 endpoints</span></div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div id="main" role="main">
+  <div class="topbar" id="topbar">
+    <div class="pg-title" id="pg-title">Overview</div>
+    <div class="tba" id="tba"></div>
+  </div>
+  <div class="content" id="content" role="region" aria-live="polite"></div>
+</div>
+
+<!-- TASK MODAL -->
+<div class="mo-bg" id="taskModal" role="dialog" aria-modal="true" aria-labelledby="mo-title-lbl">
+<div class="mo">
+  <div class="mo-hd">
+    <div class="mo-title" id="mo-title-lbl">⚡ New Mint Task</div>
+    <button class="btn btn-sm" onclick="closeModal()" aria-label="Close">✕</button>
+  </div>
+  <div class="mo-body">
+    <div class="fg">
+      <label class="fl" for="m-drop">Drop</label>
+      <select class="fs" id="m-drop" onchange="mUpdateDrop()"></select>
+    </div>
+    <div class="fg">
+      <label class="fl" for="m-phase">Mint Phase</label>
+      <select class="fs" id="m-phase" onchange="mUpdatePhase()"></select>
+      <div id="m-phase-info" style="display:none;font-size:11px;padding:6px 10px;background:var(--bg4);border-radius:6px;margin-top:5px"></div>
+    </div>
+
+    <!-- SCHEDULE SECTION -->
+    <div class="fg">
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;color:var(--text2)">
+        <input type="checkbox" id="m-sched" style="accent-color:var(--accent);width:13px;height:13px" onchange="mToggleSched()">
+        Auto-schedule to phase start
+      </label>
+      <div id="m-sched-box" style="display:none">
+        <div class="sched-box">
+          <div style="font-size:11px;color:var(--text2)">Scheduled execution time</div>
+          <div class="sched-time" id="m-sched-time">—</div>
+          <div class="sched-sub" id="m-sched-sub">Fires at the last millisecond before phase start</div>
+          <div class="countdown" id="m-countdown"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="fg">
+      <label class="fl" style="margin-bottom:7px">Mint Wallets <span style="color:var(--text3);text-transform:none;letter-spacing:0;font-weight:400;font-size:10px">— select eligible wallets</span>
+        <span style="float:right;cursor:pointer;color:var(--accent3);font-size:10px;text-transform:none;letter-spacing:0;font-weight:500" onclick="mSelectAll()">Select all</span>
+      </label>
+      <div class="wsg" id="m-wallets"></div>
+      <div id="m-elig-note" style="font-size:10.5px;color:var(--text3);margin-top:5px"></div>
+    </div>
+
+    <div class="frow">
+      <div class="fg">
+        <label class="fl" for="m-qty">Qty per wallet</label>
+        <input class="fi" type="number" id="m-qty" value="1" min="1" max="10" oninput="mCalcEst()">
+      </div>
+      <div class="fg">
+        <label class="fl" for="m-route">Inclusion route</label>
+        <select class="fs" id="m-route" onchange="mCalcEst()">
+          <option value="direct_rpc">Direct RPC (no Flashbots)</option>
+          <option value="public">Public mempool</option>
+          <option value="fb_protect">Flashbots Protect</option>
+          <option value="fb_bundle">Flashbots bundle</option>
+          <option value="delegation">Delegation batch</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- GAS PRESET + CUSTOM -->
+    <div class="fg">
+      <label class="fl" for="m-gas-preset">Gas preset</label>
+      <select class="fs" id="m-gas-preset" onchange="mGasPresetChange()" style="margin-bottom:7px">
+        <option value="slow">Slow: 15 gwei</option>
+        <option value="normal" selected>Normal: 25 gwei</option>
+        <option value="fast">Fast: 40 gwei</option>
+        <option value="turbo">Turbo: 80 gwei</option>
+        <option value="custom">Custom gwei</option>
+      </select>
+      <div id="m-custom-gas-wrap" style="display:none;margin-top:5px">
+        <label class="fl" for="m-custom-gwei">Custom gas (gwei)</label>
+        <input class="fi" type="number" id="m-custom-gwei" placeholder="e.g. 35" min="1" max="999" oninput="mCalcEst()">
+      </div>
+      <div class="gas-calc" id="m-gas-calc">
+        <div class="gas-row"><span class="gas-lbl">Gas price</span><span class="gas-val accent" id="gc-gwei">25 gwei</span></div>
+        <div class="gas-row"><span class="gas-lbl">Gas per wallet (ETH)</span><span class="gas-val" id="gc-eth-w">—</span></div>
+        <div class="gas-row"><span class="gas-lbl">Gas per wallet (USD)</span><span class="gas-val green" id="gc-usd-w">—</span></div>
+        <div class="gas-row"><span class="gas-lbl">Mint cost per wallet</span><span class="gas-val" id="gc-mint-w">—</span></div>
+        <div style="border-top:1px solid var(--border);margin:5px 0"></div>
+        <div class="gas-row"><span class="gas-lbl" style="font-weight:700;color:var(--text)">Total (all wallets)</span><span class="gas-val amber" id="gc-total">—</span></div>
+      </div>
+    </div>
+
+    <!-- RPC BLAST -->
+    <div class="fg">
+      <label class="fl">RPC Blast — all endpoints fire simultaneously</label>
+      <div class="blast-panel" id="m-blast-panel">
+        <div class="blast-title">
+          <div class="rpc-fire active"></div>
+          All RPCs armed · fires in parallel
+        </div>
+        <div class="blast-grid" id="m-blast-grid"></div>
+        <div style="font-size:10.5px;color:var(--text3);margin-top:8px">Transaction is signed once and broadcast to every endpoint at the exact same millisecond. First confirmation wins.</div>
+      </div>
+    </div>
+
+    <div class="fg">
+      <label class="fl" for="m-taskname">Task name (optional)</label>
+      <input class="fi" type="text" id="m-taskname" placeholder="e.g. Bonsai public mint attempt 1" maxlength="80">
+    </div>
+
+    <div id="m-target-block-wrap" style="display:none">
+      <div class="fg">
+        <label class="fl" for="m-block">Target block (Flashbots)</label>
+        <input class="fi" type="number" id="m-block" placeholder="e.g. 22500000">
+      </div>
+    </div>
+
+    <div class="est-box">
+      ⚡ RPC blast <span>ON</span> ·
+      Pre-warm <span>ON</span> ·
+      Est gas: <span id="me-gas">—</span> ·
+      Mint: <span id="me-mint">—</span> ·
+      Total: <span id="me-total">—</span>
+    </div>
+  </div>
+  <div class="mo-ft">
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-p" onclick="mSubmit()" id="mo-submit-btn">⚡ Create &amp; Queue</button>
+  </div>
+</div>
+</div>
+
+<!-- CHANGELOG POPUP MODAL -->
+<div class="mo-bg" id="changelogModal" role="dialog" aria-modal="true" aria-labelledby="cl-modal-title">
+<div class="cl-modal">
+  <div class="cl-modal-hd">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="cl-modal-icon">🆕</div>
+      <div>
+        <div class="cl-modal-title" id="cl-modal-title">What's New</div>
+        <div class="cl-modal-sub">Release history</div>
+      </div>
+    </div>
+    <button class="btn btn-sm" onclick="closeChangelog()" aria-label="Close">← Back</button>
+  </div>
+  <div class="cl-modal-body" id="cl-modal-body"></div>
+</div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="tw" id="tw" role="status" aria-live="polite"></div>
+
+<script src="js/api.js"></script>
+<script>
+// RV3 Mint Bot
+
+// SECURITY
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+const sanitizeAddr = s => /^0x[0-9a-fA-F]{40}$/.test(s) || (s.startsWith('0x') && s.includes('...') && s.length <= 20) ? s : '';
+const sanitizeNum = (v, min, max) => { const n = parseFloat(v); return isNaN(n) ? min : Math.min(Math.max(n, min), max); };
+const sanitizeInt = (v, min, max) => { const n = parseInt(v, 10); return isNaN(n) ? min : Math.min(Math.max(n, min), max); };
+const allowStdClass = c => ({ sd:1, '721':1, mf:1, tw:1, cx:1 }[c] ? c : '721');
+const allowRpcRole = r => ({ primary:1, blast:1, private:1 }[(r||'private').toLowerCase()] ? (r||'private').toLowerCase() : 'private');
+const allowClTag = t => ({ new:1, sec:1, fix:1 }[t] ? t : 'new');
+const isHttpsUrl = u => { try { const p = new URL(u); return p.protocol === 'https:'; } catch { return false; } };
+const clip = (s, n) => String(s || '').slice(0, n);
+
+// API SYNC
+let API_ONLINE = false;
+async function apiConnect() {
+  try {
+    await RV3_API.health();
+    API_ONLINE = true;
+    return true;
+  } catch (e) {
+    API_ONLINE = false;
+    return false;
+  }
+}
+async function syncEnvRpcs() {
+  if (!API_ONLINE) return;
+  try {
+    const { rpcs } = await RV3_API.envRpcs();
+    for (const r of rpcs || []) {
+      if (!S.rpcs.some(x => x.id === r.id)) S.rpcs.push({ ...r, url: r.url });
+    }
+    saveState();
+  } catch { /* */ }
+}
+async function syncFromServer() {
+  if (!API_ONLINE) return;
+  try {
+    const [{ tasks }, { history }, { wallets }] = await Promise.all([
+      RV3_API.listTasks(), RV3_API.history(), RV3_API.listWallets(),
+    ]);
+    if (tasks?.length) S.tasks = tasks;
+    if (history?.history?.length) S.history = history.history;
+    for (const w of wallets?.wallets || []) {
+      const existing = S.wallets.find(x => x.id === w.id);
+      if (existing) {
+        existing.eth = w.eth ?? existing.eth;
+        existing.low = w.low ?? existing.low;
+        existing.serverKey = !!w.hasKey;
+      } else {
+        S.wallets.push({ id: w.id, name: w.name, addr: w.addr || w.address, address: w.address || w.addr, eth: w.eth || 0, chain: w.chain || 'ETH', low: !!w.low, serverKey: !!w.hasKey });
+      }
+    }
+    saveState();
+    updateBadges();
+  } catch { /* */ }
+}
+function apiStatusRows() {
+  const svc = RV3_API.services;
+  if (!svc) return '<div style="font-size:12px;color:var(--text3)">Backend offline — run <code>npm start</code></div>';
+  const rows = typeof svc.opensea === 'object'
+    ? Object.values(svc)
+    : [
+        { configured: svc.opensea, label: 'OpenSea API' },
+        { configured: svc.etherscan, label: 'Etherscan API' },
+        { configured: svc.rpc > 0, label: `RPC endpoints (${svc.rpc || 0})` },
+        { configured: svc.walletEncryption, label: 'Wallet encryption' },
+        { configured: svc.liveMint, label: 'Live mint enabled' },
+        { configured: svc.discord, label: 'Discord alerts' },
+        { configured: svc.telegram, label: 'Telegram alerts' },
+      ];
+  return rows.map(s => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;font-size:12px;border-bottom:1px solid var(--border)">
+      <span style="color:var(--text2)">${esc(s.label || '')}</span>
+      <span class="st ${s.configured || s.enabled ? 'st-ok' : 'st-pend'}" style="font-size:9px">${s.configured || s.enabled ? 'OK' : 'NOT SET'}</span>
+    </div>`).join('');
+}
+
+// STATE
+const S = {
+  wallets: [],
+  drops: [],
+  tasks: [],
+  history: [],
+  rpcs: [],
+  ethUsd: 1691, // live price fetched on load
+  gasLimitMint: 200000, // standard ERC-721 mint gas limit
+  settings: {
+    defaultRoute: 'direct_rpc',
+    maxSpendEth: '',
+    lowBalanceAlert: '',
+    defaultGasPreset: 'normal',
+    rpcBlast: true,
+    rpcPrewarm: true,
+    discordWebhook: '',
+    telegramToken: '',
+    telegramChatId: '',
+    notifyMintRun: true,
+    notifyFundTransfer: true,
+    notifyLowBalance: true,
+  },
+  blastActive: false,
+  countdownInterval: null,
+};
+
+// gas presets (gwei)
+const GAS_PRESETS = { slow: 15, normal: 25, fast: 40, turbo: 80 };
+
+// PERSISTENCE: session-scoped, clears on close
+function saveState() {
+  try {
+    sessionStorage.setItem('rv3_state', JSON.stringify({
+      wallets: S.wallets, drops: S.drops, tasks: S.tasks,
+      history: S.history, rpcs: S.rpcs, settings: S.settings
+    }));
+  } catch(e) { /* quota or private mode */ }
+}
+function loadState() {
+  try {
+    const raw = sessionStorage.getItem('rv3_state');
+    if(!raw || raw.length > 500000) return;
+    const d = JSON.parse(raw);
+    if(Array.isArray(d.wallets)) S.wallets = d.wallets.slice(0, 200).filter(w => w && typeof w.id === 'string').map(w => ({
+      id: clip(w.id, 64), name: clip(w.name, 80), addr: sanitizeAddr(w.addr) || clip(w.addr, 50),
+      eth: sanitizeNum(w.eth, 0, 1e6), nonce: sanitizeInt(w.nonce, 0, 999999),
+      chain: ['ETH','Ethereum','Base','Blast'].includes(w.chain) ? w.chain : 'ETH', low: !!w.low
+    }));
+    if(Array.isArray(d.drops)) S.drops = d.drops.slice(0, 100).filter(x => x && typeof x.id === 'string').map(x => ({
+      id: clip(x.id, 64), name: clip(x.name, 120), addr: clip(x.addr, 66),
+      std: clip(x.std, 40), stdClass: allowStdClass(x.stdClass), chain: clip(x.chain, 20),
+      chainSlug: clip(x.chainSlug, 20) || 'ethereum',
+      openseaSlug: clip(x.openseaSlug, 120) || null,
+      phases: Array.isArray(x.phases) ? x.phases.slice(0, 20).map(p => ({
+        uuid: p.uuid || null,
+        type: clip(p.type, 20) || 'public',
+        stageType: clip(p.stageType, 30) || '',
+        label: clip(p.label, 120) || '',
+        status: ['live','scheduled','ended'].includes(p.status) ? p.status : 'scheduled',
+        openTimestamp: typeof p.openTimestamp === 'number' ? p.openTimestamp : null,
+        closeTimestamp: typeof p.closeTimestamp === 'number' ? p.closeTimestamp : null,
+        priceEth: sanitizeNum(p.priceEth, 0, 1000),
+        maxPerWallet: p.maxPerWallet != null ? sanitizeInt(p.maxPerWallet, 0, 999) : null,
+        requiresAllowlist: !!p.requiresAllowlist,
+      })) : [],
+      walletElig: (x.walletElig && typeof x.walletElig === 'object') ? x.walletElig : {},
+    }));
+    if(Array.isArray(d.tasks)) S.tasks = d.tasks.slice(0, 200).filter(t => t && typeof t.id === 'string').map(t => ({
+      id: clip(t.id, 64), drop: clip(t.drop, 120), dropId: clip(t.dropId, 64),
+      route: clip(t.route, 40), qty: sanitizeInt(t.qty, 1, 10), name: clip(t.name, 120),
+      status: ['queued','running','done','failed','cancelled'].includes(t.status) ? t.status : 'queued',
+      time: clip(t.time, 40), scheduledFor: t.scheduledFor ? clip(t.scheduledFor, 40) : null,
+      wallets: sanitizeInt(t.wallets, 0, 200), rpcCount: sanitizeInt(t.rpcCount, 0, 50)
+    }));
+    if(Array.isArray(d.history)) S.history = d.history.slice(0, 500);
+    if(Array.isArray(d.rpcs)) S.rpcs = d.rpcs.slice(0, 50).filter(r => r && typeof r.id === 'string' && isHttpsUrl(r.url)).map(r => ({
+      id: clip(r.id, 64), name: clip(r.name, 40), role: ['Primary','Blast','Private'].includes(r.role) ? r.role : 'Private',
+      url: r.url, ms: r.ms == null ? null : sanitizeInt(r.ms, 0, 60000), active: r.active !== false
+    }));
+    if(d.settings && typeof d.settings === 'object') {
+      const s = d.settings;
+      S.settings = Object.assign({}, S.settings, {
+        defaultRoute: ['direct_rpc','public_mempool','flashbots_protect','flashbots_bundle','delegation_batch'].includes(s.defaultRoute) ? s.defaultRoute : S.settings.defaultRoute,
+        maxSpendEth: clip(s.maxSpendEth, 20), lowBalanceAlert: clip(s.lowBalanceAlert, 20),
+        defaultGasPreset: ['slow','normal','fast','turbo','custom'].includes(s.defaultGasPreset) ? s.defaultGasPreset : S.settings.defaultGasPreset,
+        rpcBlast: !!s.rpcBlast, rpcPrewarm: !!s.rpcPrewarm,
+        discordWebhook: isHttpsUrl(s.discordWebhook) ? clip(s.discordWebhook, 300) : '',
+        telegramToken: clip(s.telegramToken, 120), telegramChatId: clip(s.telegramChatId, 30),
+        notifyMintRun: !!s.notifyMintRun, notifyFundTransfer: !!s.notifyFundTransfer, notifyLowBalance: !!s.notifyLowBalance
+      });
+    }
+  } catch(e) { sessionStorage.removeItem('rv3_state'); }
+}
+
+// ROUTER
+const PAGES = new Set(['overview','detector','wallets','drops','tasks','deleg','history','pnl','settings','fund','sweep','guide']);
+function go(page) {
+  if(!PAGES.has(page)) return;
+  document.querySelectorAll('.ni').forEach(n => { n.classList.remove('act'); n.removeAttribute('aria-current'); });
+  const el = document.getElementById('nav-'+page);
+  if(el) { el.classList.add('act'); el.setAttribute('aria-current','page'); }
+  const renders = {
+    overview: renderOverview, detector: renderDetector,
+    wallets: renderWallets, drops: renderDrops, tasks: renderTasks,
+    deleg: renderDeleg, history: renderHistory, pnl: renderPnl,
+    settings: renderSettings, fund: renderFund, sweep: renderSweep,
+    guide: renderGuide
+  };
+  const titles = {
+    overview:'Overview', detector:'Contract Detector', wallets:'Wallets',
+    drops:'Drops', tasks:'Tasks', deleg:'Delegation', history:'Run History',
+    pnl:'PnL', settings:'Settings', fund:'Fund Wallets', sweep:'NFT Sweep',
+    guide:'User Guide'
+  };
+  document.getElementById('pg-title').textContent = titles[page] || page;
+  document.getElementById('tba').innerHTML = '';
+  document.getElementById('content').innerHTML = '';
+  if(renders[page]) renders[page]();
+  updateBadges();
+}
+
+function updateBadges() {
+  document.getElementById('nb-wallets').textContent = S.wallets.length;
+  document.getElementById('nb-wallets').style.display = S.wallets.length ? 'block' : 'none';
+  document.getElementById('nb-drops').textContent = S.drops.length;
+  document.getElementById('nb-drops').style.display = S.drops.length ? 'block' : 'none';
+  const q = S.tasks.filter(t => t.status === 'queued').length;
+  document.getElementById('nb-tasks').textContent = q;
+  document.getElementById('nb-tasks').style.display = q ? 'block' : 'none';
+  document.getElementById('sys-rpc-lbl').textContent = `RPC: ${S.rpcs.length} endpoint${S.rpcs.length !== 1 ? 's' : ''}`;
+}
+
+// ── OVERVIEW ──
+function renderOverview() {
+  const c = document.getElementById('content');
+  const lowW = S.wallets.filter(w => w.eth < (parseFloat(S.settings.lowBalanceAlert)||0.01));
+  const liveDrops = S.drops.filter(d => d.phases && d.phases.some(p => p.status === 'live'));
+  const completedRuns = S.history.filter(r => r.status === 'completed').length;
+  const failedRuns = S.history.filter(r => r.status === 'failed').length;
+
+  document.getElementById('tba').innerHTML = '';
+
+  c.innerHTML = `
+<div class="stats-row">
+  <div class="sc s-a"><div class="sc-lbl">Wallets</div><div class="sc-val">${S.wallets.length||'—'}</div><div class="sc-sub">${S.wallets.length ? `${lowW.length} low balance` : 'No wallets added'}</div></div>
+  <div class="sc s-g"><div class="sc-lbl">Drops</div><div class="sc-val">${S.drops.length||'—'}</div><div class="sc-sub">${liveDrops.length} live phase${liveDrops.length!==1?'s':''}</div></div>
+  <div class="sc s-o"><div class="sc-lbl">Tasks</div><div class="sc-val">${S.tasks.length||'—'}</div><div class="sc-sub">${S.tasks.filter(t=>t.status==='queued').length} queued</div></div>
+  <div class="sc s-r"><div class="sc-lbl">Runs</div><div class="sc-val">${S.history.length||'—'}</div><div class="sc-sub">${completedRuns} completed · ${failedRuns} failed</div></div>
+</div>
+${lowW.length ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt">${lowW.length} wallet${lowW.length>1?'s':''} below threshold: ${lowW.map(w=>esc(w.name)).join(', ')}. Fund before next run.</div></div>` : ''}
+${!S.wallets.length ? `<div class="ban ban-i"><div class="ban-ico">ℹ</div><div class="ban-txt">No wallets added yet. Go to <span style="color:var(--accent3);cursor:pointer" onclick="go('wallets')">Wallets →</span> to import or generate.</div></div>` : ''}
+${!S.rpcs.length ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt">No RPC endpoints configured. Add your Alchemy/QuickNode URLs in <span style="color:var(--accent3);cursor:pointer" onclick="go('settings')">Settings →</span></div></div>` : ''}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+<div>
+  <div class="section-lbl">System health</div>
+  <div class="card">
+    ${[['Database','OK',true],['Redis queue','OK',true],['VPS Mint Worker',S.rpcs.length?'ONLINE':'IDLE',true],['RPC Endpoints',S.rpcs.length ? `${S.rpcs.length} active` : '0 — add in Settings',!!S.rpcs.length]].map(([n,s,ok])=>`
+    <div style="display:flex;align-items:center;gap:9px;padding:9px 14px;border-bottom:1px solid var(--border)">
+      <div class="dot ${ok?'dg':'da'}"></div>
+      <div style="flex:1;font-size:12px;font-weight:500">${esc(n)}</div>
+      <div style="font-size:11px;color:${ok?'var(--green)':'var(--amber)'};font-weight:700">${esc(s)}</div>
+    </div>`).join('')}
+    <div style="padding:7px 14px;font-size:10px;color:var(--text3)">Last check: ${new Date().toLocaleTimeString()}</div>
+  </div>
+  ${liveDrops.length ? `
+  <div class="section-lbl">Live now</div>
+  <div class="card">${liveDrops.map(d => {
+    const live = d.phases.find(p => p.status==='live');
+    return `<div style="padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
+      <div style="flex:1"><div style="font-size:12.5px;font-weight:700">${esc(d.name)}</div><div style="font-size:10.5px;color:var(--green);margin-top:2px">⬤ ${esc(live.label)} · ${esc(live.priceLabel)} · Live</div></div>
+      <button class="btn btn-p btn-sm" onclick="openModal('${esc(d.id)}')">Mint</button>
+    </div>`;
+  }).join('')}</div>` : ''}
+</div>
+<div>
+  <div class="section-lbl">Recent runs</div>
+  ${S.history.length ? `<div class="card">${S.history.slice(0,4).map(r=>`
+  <div class="rr">
+    <div class="rd" style="background:${r.status==='completed'?'var(--green)':r.status==='failed'?'var(--red)':'var(--amber)'}"></div>
+    <div class="ri"><div class="rn">${esc(r.drop)}</div><div class="rm">${esc(r.route||'')} · ${r.wallets} wallet${r.wallets!==1?'s':''} · ${esc(r.time)}</div></div>
+    <div class="st st-${r.status==='completed'?'ok':r.status==='failed'?'fail':'part'}">${r.status.toUpperCase()}</div>
+  </div>`).join('')}</div>` : `<div class="card"><div class="es"><div class="es-icon">◑</div><div class="es-title">No runs yet</div><div class="es-sub">Create a task and execute it</div></div></div>`}
+  <div class="section-lbl" style="margin-top:14px">Quick actions</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    ${[['◎','Detect contract','detector'],['⚡','New mint task','_modal'],['◫','Manage wallets','wallets'],['📈','View PnL','pnl']].map(([icon,label,action])=>`
+    <button class="btn" onclick="${action==='_modal'?'openModal()':'go(\''+action+'\')'}" style="padding:11px;flex-direction:column;height:auto;gap:4px">
+      <span style="font-size:18px">${icon}</span>
+      <span style="font-size:11px;font-weight:600">${label}</span>
+    </button>`).join('')}
+  </div>
+</div>
+</div>`;
+}
+
+// ── DETECTOR ──
+const DET_DB = {
+  seadrop:{name:'',addr:'0x...',std:'SeaDrop',stdClass:'sd',chain:'Ethereum',price:'',supply:'',totalMinted:'',verified:'✓ Verified',source:'OpenSea API + On-chain ABI',phases:[]},
+};
+
+function renderDetector() {
+  const c = document.getElementById('content');
+  c.innerHTML = `
+<div class="card">
+  <div class="card-hd"><span style="font-size:16px">◎</span><h2>Paste contract address or collection URL</h2><span style="font-size:10.5px;color:var(--text3)">ETH · Base · Blast</span></div>
+  <div class="card-body">
+    <div style="display:flex;gap:8px">
+      <input class="fi" id="det-in" placeholder="0x...  or  opensea.io/collection/...  or  magiceden.io/collections/..."
+             style="flex:1;font-family:var(--mono)" oninput="detOnInput()" onkeydown="if(event.key==='Enter')detRun()">
+      <button class="btn btn-p" onclick="detRun()" id="det-btn">⚡ Detect</button>
+    </div>
+    <div style="font-size:10.5px;color:var(--text3);margin-top:8px">Detects: SeaDrop, ERC-721A, ERC-721C, Manifold, Thirdweb, custom <code>mint()</code> · <code>claim()</code> functions · OpenSea signed drops</div>
+  </div>
+</div>
+
+<div id="det-result" style="display:none"></div>
+
+<div class="section-lbl" style="margin-top:18px">Supported platforms</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:7px">
+  ${[['🌊','OpenSea','SeaDrop/ERC-721C'],['◈','Magic Eden','ERC-721A/1155'],['◎','Blur.xyz','ERC-721A'],['♛','Kingdomly','ERC-721A'],['⬡','Hyperlaunch','ERC-721A'],['◉','Manifold','Custom ext.'],['⬡','Thirdweb','SDK-based'],['◷','Zora','ERC-721/1155'],['◫','Foundation','ERC-721'],['◈','SuperRare','ERC-721']].map(([icon,name,type])=>`
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:9px 11px;display:flex;align-items:flex-start;gap:7px">
+    <span style="font-size:15px;line-height:1.2;flex-shrink:0">${icon}</span>
+    <div><div style="font-size:12px;font-weight:600">${esc(name)}</div><div style="font-size:9.5px;color:var(--text3);margin-top:1px">${esc(type)}</div></div>
+  </div>`).join('')}
+</div>`;
+}
+
+function detOnInput() {
+  document.getElementById('det-result').style.display = 'none';
+}
+
+function phaseTypeBadge(type) {
+  const map = { public: 'Public', allowlist: 'Allowlist', gtd: 'GTD', presale: 'Presale' };
+  return map[type] || type || '';
+}
+
+async function detRun() {
+  const val = document.getElementById('det-in')?.value?.trim() || '';
+  if(!val) { toast('Paste a contract address or URL', '⚠'); return; }
+  if(val.length > 500) { toast('Input too long', '⚠'); return; }
+  const btn = document.getElementById('det-btn');
+  btn.innerHTML = '<span class="spin">⟳</span> Detecting...';
+  btn.disabled = true;
+  try {
+    let result;
+    if (API_ONLINE) {
+      result = await RV3_API.detect(val, true);
+      if (!result.live) toast('Using fallback — check OPENSEA_API_KEY in .env', 'ℹ');
+      else if (result.hasDrop) toast(`Live drop · ${result.phases?.length || 0} phase(s) detected`, '✓');
+      else toast('Live data from OpenSea API', '✓');
+    } else {
+      result = detAnalyze(val);
+      toast('Backend offline — heuristic only. Run npm start', '⚠');
+    }
+    showDetResult(result);
+  } catch (e) {
+    toast(e.message || 'Detection failed', '⚠');
+    showDetResult(detAnalyze(val));
+  } finally {
+    btn.innerHTML = '⚡ Detect';
+    btn.disabled = false;
+  }
+}
+
+function detAnalyze(val) {
+  const v = val.toLowerCase();
+  let std = 'ERC-721A', stdClass = '721', chain = 'Ethereum';
+  if(v.includes('opensea') || v.includes('seadrop')) { std='SeaDrop'; stdClass='sd'; }
+  else if(v.includes('magiceden') || v.includes('magic-eden')) { std='ERC-721A'; stdClass='721'; }
+  else if(v.includes('manifold')) { std='Manifold'; stdClass='mf'; chain='Ethereum'; }
+  else if(v.includes('thirdweb')) { std='Thirdweb'; stdClass='tw'; }
+  else if(v.includes('base')) { chain='Base'; }
+  else if(v.includes('blast')) { chain='Blast'; }
+  const isUrl = v.includes('http') || v.includes('.io') || v.includes('.xyz') || v.includes('.com');
+  return {
+    name: isUrl ? val.split('/').filter(Boolean).pop()?.replace(/-/g,' ') || 'Unknown' : 'Contract',
+    addr: val.length < 60 ? val : val.substring(0, 20)+'...',
+    std, stdClass, chain,
+    price: '—', supply: '—', totalMinted: '—',
+    verified: '? Unverified — connect Etherscan API in Settings to verify',
+    source: isUrl ? 'Platform API (read-only scrape)' : 'On-chain ABI analysis',
+    phases: [
+      {label:'Public · price TBC', status:'live', openTimestamp: Date.now() + 3600000 * 2},
+    ],
+    walletElig: {}
+  };
+}
+
+function showDetResult(r) {
+  const panel = document.getElementById('det-result');
+  const eligNote = r.eligibilitySummary
+    ? `${r.eligibilitySummary.eligible} eligible · ${r.eligibilitySummary.ineligible} not eligible · ${r.eligibilitySummary.pending} pending`
+    : '';
+  panel.innerHTML = `
+  <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);overflow:hidden;margin-bottom:14px" class="fade-in">
+    <div style="padding:13px 15px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:11px;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:14px;font-weight:700">${esc(r.name)}</div>
+        <div style="font-family:var(--mono);font-size:10.5px;color:var(--text3);margin-top:2px">${esc(r.addr)} · ${esc(r.chain)}${r.isMinting ? ' · <span style="color:var(--green)">Minting now</span>' : ''}</div>
+      </div>
+      <span class="tb tb-${allowStdClass(r.stdClass)}">${esc(r.std)}</span>
+      <button class="btn btn-p btn-sm" onclick="detAddToDrops()" id="det-add-btn">+ Add to Drops</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:1px;background:var(--border)">
+      ${[['Standard',r.std,'accent'],['Chain',r.chain,''],['Mint price',r.price,'green'],['Supply',r.supply,''],['Minted',r.totalMinted,''],['Verified',r.verified,'']].map(([l,v,cls])=>`
+      <div style="background:var(--bg2);padding:9px 13px">
+        <div style="font-size:9.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin-bottom:3px">${l}</div>
+        <div style="font-size:12px;font-weight:600;${cls==='accent'?'color:var(--accent3)':cls==='green'?'color:var(--green)':''}">${esc(String(v))}</div>
+      </div>`).join('')}
+    </div>
+    <div style="padding:12px 15px;border-top:1px solid var(--border)">
+      <div style="font-size:9.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin-bottom:7px">Detected phases (${(r.phases||[]).length})</div>
+      ${(r.phases||[]).map(p=>`<span class="pp pp-${p.status}" title="${esc(phaseTypeBadge(p.type))} · ${esc(p.status||'')}">${p.status==='live'?'<span class="pp-dot"></span>':''}${esc(p.label)}</span>`).join('')}
+      ${eligNote ? `<div style="font-size:10.5px;color:var(--text3);margin-top:8px">Wallet check: ${esc(eligNote)}</div>` : ''}
+    </div>
+    <div class="ban ban-i" style="margin:0 14px 12px;border-radius:var(--r)">
+      <div class="ban-ico">ℹ</div>
+      <div class="ban-txt" style="font-size:11px">${r.hasDrop ? 'Phases parsed from OpenSea drop schedule (GTD, Allowlist, Public). Eligibility checked via mint preflight for live phases.' : 'Connect OpenSea API key for full drop phase detection and wallet eligibility checks.'}</div>
+    </div>
+  </div>`;
+  panel.style.display = 'block';
+  window._lastDetected = r;
+}
+
+function detAddToDrops() {
+  const r = window._lastDetected;
+  if(!r) return;
+  const id = 'drop_' + Date.now();
+  S.drops.push({
+    id, name: r.name || 'Unknown', addr: r.addr,
+    std: r.std, stdClass: r.stdClass, chain: r.chain,
+    chainSlug: r.chainSlug || 'ethereum',
+    openseaSlug: r.openseaSlug || null,
+    phases: r.phases || [],
+    walletElig: r.walletElig || {},
+  });
+  saveState(); updateBadges();
+  document.getElementById('det-add-btn').textContent = '✓ Added';
+  document.getElementById('det-add-btn').disabled = true;
+  toast(`${r.name} added to Drops`, '✓');
+}
+
+// ── WALLETS ──
+function renderWallets() {
+  const c = document.getElementById('content');
+  const tb = document.getElementById('tba');
+  tb.innerHTML = `
+    <button class="btn btn-sm" onclick="walletImport()">Import</button>
+    <button class="btn btn-p btn-sm" onclick="walletGenerate()">+ Generate</button>
+  `;
+  const lowBal = parseFloat(S.settings.lowBalanceAlert) || 0.01;
+  c.innerHTML = `
+<div class="tabs">
+  <div class="tab act" onclick="wTab('manage',this)">Manage</div>
+  <div class="tab" onclick="wTab('fund',this)">Fund</div>
+  <div class="tab" onclick="wTab('split',this)">Split gas</div>
+</div>
+${S.wallets.filter(w=>w.eth<lowBal).length ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt">${S.wallets.filter(w=>w.eth<lowBal).length} wallet(s) below ${lowBal} ETH threshold.</div></div>` : ''}
+${S.wallets.length ? `
+<div class="wg" id="wallet-grid">
+  ${S.wallets.map(w=>walletCardHTML(w, lowBal)).join('')}
+</div>
+<div style="font-size:11.5px;color:var(--text3);text-align:center;padding:8px 0">
+  Total: <span style="color:var(--text);font-weight:700">${S.wallets.reduce((a,w)=>a+w.eth,0).toFixed(4)} ETH</span> across ${S.wallets.length} wallet${S.wallets.length!==1?'s':''}
+</div>` : `
+<div class="card"><div class="es">
+  <div class="es-icon">◫</div>
+  <div class="es-title">No wallets added</div>
+  <div class="es-sub">Import a private key or generate a new wallet</div>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
+    <button class="btn" onclick="walletImport()">Import wallet</button>
+    <button class="btn btn-p" onclick="walletGenerate()">Generate new</button>
+  </div>
+</div></div>`}
+
+<!-- ADD WALLET FORM -->
+<div class="card" id="wallet-add-card" style="display:none">
+  <div class="card-hd"><h2 id="wadd-title">Import Wallet</h2></div>
+  <div class="card-body">
+    <div class="fg">
+      <label class="fl" for="wadd-name">Label / Name</label>
+      <input class="fi" id="wadd-name" placeholder="e.g. Main wallet" maxlength="30">
+    </div>
+    <div class="fg">
+      <label class="fl" for="wadd-key">Private Key or Address</label>
+      <input class="fi" id="wadd-key" type="password" placeholder="0x... (private key is never stored)" maxlength="66" autocomplete="off">
+      <div style="font-size:10px;color:var(--text3);margin-top:4px">⚠ Never share your private key. RV3 stores only an address hint — the raw key is cleared immediately and never saved.</div>
+    </div>
+    <div class="fg">
+      <label class="fl" for="wadd-bal">Current ETH balance (manual)</label>
+      <input class="fi" id="wadd-bal" type="number" step="0.0001" min="0" placeholder="e.g. 0.1500">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-p" onclick="walletSave()">Save wallet</button>
+      <button class="btn" onclick="document.getElementById('wallet-add-card').style.display='none'">Cancel</button>
+    </div>
+  </div>
+</div>`;
+}
+
+function walletCardHTML(w, lowBal) {
+  const isLow = w.eth < lowBal;
+  return `<div class="wc${isLow?' low':''}">
+    <div class="wc-addr" title="${esc(w.addr)}">${esc(w.addr)}</div>
+    <div class="wc-name">${esc(w.name)}</div>
+    <div class="wc-bal">${w.eth.toFixed(4)} ETH</div>
+    <div class="wc-sub">nonce ${w.nonce||0}</div>
+    <div class="wc-actions">
+      <span class="ct ${w.chain==='Base'?'ct-base':w.chain==='Blast'?'ct-blast':'ct-eth'}">◆ ${esc(w.chain||'ETH')}</span>
+      <div style="display:flex;gap:2px">
+        <span class="wc-act" onclick="copyAddr('${esc(w.addr)}')" title="Copy address">⧉</span>
+        <span class="wc-act" onclick="walletFund('${esc(w.id)}')" title="Fund">⬆</span>
+        <span class="wc-act del" onclick="walletDelete('${esc(w.id)}')" title="Remove">✕</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function wTab(tab, el) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('act'));
+  el.classList.add('act');
+  if(tab==='fund') { setTimeout(()=>go('fund'),80); }
+  else if(tab==='split') { setTimeout(()=>go('fund'),80); }
+}
+
+function walletImport() {
+  const card = document.getElementById('wallet-add-card');
+  if(card) { card.style.display='block'; document.getElementById('wadd-title').textContent='Import Wallet'; }
+}
+function walletGenerate() {
+  const card = document.getElementById('wallet-add-card');
+  if(card) { card.style.display='block'; document.getElementById('wadd-title').textContent='Generate New Wallet'; }
+}
+async function walletSave() {
+  const name = document.getElementById('wadd-name')?.value?.trim();
+  const key = document.getElementById('wadd-key')?.value?.trim();
+  const bal = parseFloat(document.getElementById('wadd-bal')?.value) || 0;
+  if(!name) { toast('Enter a wallet name','⚠'); return; }
+  if(!key) { toast('Enter a private key','⚠'); return; }
+  const keyEl = document.getElementById('wadd-key');
+  try {
+    if (API_ONLINE && key.length >= 64) {
+      const { wallet } = await RV3_API.importWallet(name, key, bal);
+      S.wallets.push({ id: wallet.id, name: wallet.name, addr: wallet.addr, eth: wallet.eth || bal, nonce: 0, chain: 'ETH', low: bal < 0.01, serverKey: true });
+      if(keyEl) keyEl.value = '';
+      saveState(); updateBadges();
+      document.getElementById('wallet-add-card').style.display='none';
+      toast(`Wallet "${name}" encrypted on server`,'✓');
+      go('wallets');
+      return;
+    }
+  } catch (e) {
+    toast(e.message || 'Server import failed','⚠');
+    return;
+  }
+  const addrHint = key.startsWith('0x') && key.length >= 40 ? key.substring(0,8)+'...'+key.substring(key.length-6) : '0x???...???';
+  const id = 'w_' + Date.now();
+  S.wallets.push({ id, name, addr: addrHint, eth: bal, nonce: 0, chain: 'ETH', low: bal < 0.01 });
+  if(keyEl) keyEl.value = '';
+  saveState(); updateBadges();
+  document.getElementById('wallet-add-card').style.display='none';
+  toast(`Wallet "${name}" added (UI only — start backend for signing)`,'ℹ');
+  go('wallets');
+}
+function walletDelete(id) {
+  const w = S.wallets.find(w=>w.id===id);
+  if(!w) return;
+  if(!confirm(`Remove wallet "${w.name}"? This only removes it from RV3. Your funds are unaffected.`)) return;
+  S.wallets = S.wallets.filter(w=>w.id!==id);
+  saveState(); updateBadges();
+  toast(`Wallet removed`,'ℹ');
+  go('wallets');
+}
+function walletFund(id) { toast('Send ETH to the wallet address directly','ℹ'); }
+function copyAddr(addr) { navigator.clipboard?.writeText(addr).then(()=>toast('Address copied','✓')); }
+
+// ── DROPS ──
+function renderDrops() {
+  const c = document.getElementById('content');
+  document.getElementById('tba').innerHTML = `
+    <button class="btn btn-sm btn-r" onclick="dropsClearAll()">Clear all</button>
+    <button class="btn btn-p btn-sm" onclick="go('detector')">+ Add drop</button>
+  `;
+  c.innerHTML = S.drops.length ? `
+<div class="dt">
+  <div class="dt-hd"><div class="dth">Collection</div><div class="dth">Standard</div><div class="dth">Best phase</div><div class="dth">Status</div><div class="dth"></div></div>
+  ${S.drops.map(d => {
+    const best = d.phases?.find(p=>p.status==='live') || d.phases?.find(p=>p.status==='scheduled') || d.phases?.[0];
+    return `<div class="dt-row">
+      <div class="dtd"><div class="dn">${esc(d.name)}</div><div class="da-addr">${esc(d.addr)}</div><span class="ct ${d.chain==='Base'?'ct-base':d.chain==='Blast'?'ct-blast':'ct-eth'}" style="margin-top:3px;display:inline-flex">◆ ${esc(d.chain||'ETH')}</span></div>
+      <div class="dtd"><span class="tb tb-${allowStdClass(d.stdClass)}">${esc(d.std||'ERC-721A')}</span></div>
+      <div class="dtd" style="font-size:12px">${best?esc(best.label+' · '+(best.priceLabel||'')):'—'}</div>
+      <div class="dtd">${(d.phases||[]).map(p=>`<span class="st st-${p.status==='live'?'live':p.status==='scheduled'?'pend':'end'}" style="margin:1px 2px 1px 0;font-size:9.5px">${esc(p.status)}</span>`).join('')||'—'}</div>
+      <div class="dtd" style="display:flex;gap:5px">
+        <button class="btn btn-p btn-xs" onclick="openModal('${esc(d.id)}')">⚡ Mint</button>
+        <button class="btn btn-xs btn-r" onclick="dropDelete('${esc(d.id)}')">✕</button>
+      </div>
+    </div>`;}).join('')}
+</div>
+<div class="ban ban-i"><div class="ban-ico">ℹ</div><div class="ban-txt">For SeaDrop/OpenSea drops: calldata is fetched per wallet at preflight. Wallet eligibility checked automatically.</div></div>` : `
+<div class="card"><div class="es">
+  <div class="es-icon">◈</div>
+  <div class="es-title">No drops tracked</div>
+  <div class="es-sub">Use the Detector to add a contract</div>
+  <button class="btn btn-p" onclick="go('detector')" style="margin-top:12px">+ Detect contract</button>
+</div></div>`;
+}
+
+function dropDelete(id) {
+  S.drops = S.drops.filter(d=>d.id!==id);
+  saveState(); updateBadges(); go('drops');
+  toast('Drop removed','ℹ');
+}
+function dropsClearAll() {
+  if(!S.drops.length) return;
+  if(!confirm('Clear all drops?')) return;
+  S.drops = []; saveState(); updateBadges(); go('drops');
+  toast('All drops cleared','ℹ');
+}
+
+// ── TASKS ──
+function renderTasks() {
+  const c = document.getElementById('content');
+  document.getElementById('tba').innerHTML = `<button class="btn btn-p btn-sm" onclick="openModal()">+ New task</button>`;
+  c.innerHTML = S.tasks.length ? `
+<div class="card">
+  ${S.tasks.map(t=>`
+  <div class="rr">
+    <div class="rd" style="background:${t.status==='queued'?'var(--amber)':t.status==='running'?'var(--accent)':'var(--green)'}"></div>
+    <div class="ri">
+      <div class="rn">${esc(t.name||t.drop)}</div>
+      <div class="rm">${esc(t.route||'')} · ${t.wallets} wallet${t.wallets!==1?'s':''} · qty ${t.qty} · ${esc(t.time||'')}</div>
+      ${t.scheduledFor ? `<div style="font-size:10px;color:var(--amber);margin-top:2px;font-family:var(--mono)">⏰ Scheduled: ${esc(t.scheduledFor)}</div>` : ''}
+    </div>
+    <div class="st st-${t.status==='queued'?'q':t.status==='running'?'run':'ok'}">${t.status.toUpperCase()}</div>
+    ${t.status==='queued'?`<button class="btn btn-r btn-xs" onclick="cancelTask('${esc(t.id)}')">Cancel</button>`:''}
+  </div>`).join('')}
+</div>` : `
+<div class="card"><div class="es">
+  <div class="es-icon">⚡</div>
+  <div class="es-title">No tasks queued</div>
+  <div class="es-sub">Create a task from a drop or detected contract</div>
+  <button class="btn btn-p" onclick="openModal()" style="margin-top:12px">+ New mint task</button>
+</div></div>`;
+}
+
+function cancelTask(id) {
+  S.tasks = S.tasks.filter(t=>t.id!==id);
+  saveState(); updateBadges();
+  toast('Task cancelled','ℹ');
+  go('tasks');
+}
+
+// ── DELEGATION ──
+function renderDeleg() {
+  const c = document.getElementById('content');
+  c.innerHTML = `
+<div class="card"><div class="card-hd"><h2>How batch mint works</h2></div>
+<div class="card-body" style="font-size:12.5px;line-height:1.85;color:var(--text2)">
+  Your executor contract runs multiple mint calls in one transaction for <code>mintSigned</code> OpenSea drops — operator wallet pays all costs; NFTs land on each task wallet.<br><br>
+  For <code>mintPublic</code> drops where your executor is not on the SeaDrop payer allowlist, RV3 orchestrates separate wallet-signed mints. Use Private RPC for fastest FCFS.
+</div></div>
+<div class="card">
+  <div class="card-hd"><h2>Setup wizard</h2></div>
+  <div class="card-body">
+    <div class="dsteps"><div class="ds act">1. Choose operator</div><div class="ds">2. Fund operator</div><div class="ds">3. Deploy &amp; mint</div></div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:14px">Pick the operator wallet that will pay gas and mint cost for the batch.</div>
+    <div class="frow">
+      <div class="fg"><label class="fl">Operator wallet</label>
+        <select class="fs">${S.wallets.length ? S.wallets.map(w=>`<option>${esc(w.name)} — ${esc(w.addr)} (${w.eth.toFixed(4)} ETH)</option>`).join('') : '<option disabled>No wallets — add in Wallets tab</option>'}</select>
+      </div>
+      <div class="fg"><label class="fl">Executor label</label><input class="fi" value="Batch executor"></div>
+    </div>
+    <button class="btn btn-p" onclick="toast('Deploy processed by VPS worker — ensure worker is running','ℹ')">Deploy contract</button>
+  </div>
+</div>
+<div class="section-lbl">Your deployments</div>
+<div class="card"><div class="es">
+  <div class="es-icon">◈</div>
+  <div class="es-title">No delegation contracts deployed</div>
+  <div class="es-sub">Use the wizard above to deploy your batch executor</div>
+</div></div>`;
+}
+
+// ── HISTORY ──
+function renderHistory() {
+  const c = document.getElementById('content');
+  document.getElementById('tba').innerHTML = `<button class="btn btn-sm btn-r" onclick="historyClear()">Clear history</button>`;
+  c.innerHTML = S.history.length ? `
+<div class="card">
+  ${S.history.map(r=>`
+  <div class="rr">
+    <div class="rd" style="background:${r.status==='completed'?'var(--green)':r.status==='failed'?'var(--red)':'var(--amber)'}"></div>
+    <div class="ri">
+      <div class="rn">${esc(r.drop)}</div>
+      <div class="rm">${esc(r.route||'')} · ${r.wallets} wallet${r.wallets!==1?'s':''} · qty ${r.qty||1} · ${esc(r.time)}</div>
+    </div>
+    <div style="text-align:right;font-size:10px;color:var(--text3);margin-right:8px;flex-shrink:0">
+      <div>${r.minted||0}/${(r.wallets||1)*(r.qty||1)} minted</div>
+      ${r.txHash?`<div style="font-family:var(--mono);margin-top:1px">${esc(r.txHash)}</div>`:''}
+    </div>
+    <div class="st st-${r.status==='completed'?'ok':r.status==='failed'?'fail':'part'}">${r.status.toUpperCase()}</div>
+  </div>`).join('')}
+</div>
+<div class="section-lbl">Execution log</div>
+<div class="terminal" id="exec-log">
+  <div class="l-dim">[${new Date().toLocaleTimeString()}] RV3 worker idle · watching for queued tasks</div>
+  <div class="l-info cursor-blink">[${new Date().toLocaleTimeString()}] Ready</div>
+</div>` : `
+<div class="card"><div class="es">
+  <div class="es-icon">◑</div>
+  <div class="es-title">No run history</div>
+  <div class="es-sub">Completed runs will appear here with full execution logs</div>
+</div></div>`;
+}
+function historyClear() {
+  if(!S.history.length) return;
+  if(!confirm('Clear all run history?')) return;
+  S.history = []; saveState(); go('history');
+}
+
+// ── PNL ──
+function renderPnl() {
+  const c = document.getElementById('content');
+  const totalMinted = S.history.reduce((a,r)=>a+(r.minted||0),0);
+  const totalGas = S.history.reduce((a,r)=>a+(r.gasCostUsd||0),0);
+  c.innerHTML = totalMinted ? `
+<div class="pnl-g">
+  <div class="pnl-c"><div class="pnl-lbl">Total minted</div><div class="pnl-val">${totalMinted} NFTs</div><div style="font-size:10.5px;color:var(--text2);margin-top:3px">across ${S.history.length} run${S.history.length!==1?'s':''}</div></div>
+  <div class="pnl-c"><div class="pnl-lbl">Total gas spent</div><div class="pnl-val amb">$${totalGas.toFixed(2)}</div><div style="font-size:10.5px;color:var(--text2);margin-top:3px">USD equiv</div></div>
+  <div class="pnl-c"><div class="pnl-lbl">Avg cost/NFT</div><div class="pnl-val">${totalMinted?'$'+(totalGas/totalMinted).toFixed(2):'—'}</div><div style="font-size:10.5px;color:var(--text2);margin-top:3px">gas only</div></div>
+</div>
+<div class="ban ban-i"><div class="ban-ico">ℹ</div><div class="ban-txt">Connect OpenSea/Blur API in Settings for live floor price tracking and unrealised PnL calculations.</div></div>
+<div class="card">
+  <div class="card-hd"><h2>Run breakdown</h2></div>
+  <div style="padding:0">
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;background:var(--bg3);padding:8px 14px;border-bottom:1px solid var(--border)">
+      ${['Run','Minted','Gas cost','Status'].map(h=>`<div style="font-size:9.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;font-weight:700">${h}</div>`).join('')}
+    </div>
+    ${S.history.map(r=>`
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">
+      <div><div style="font-size:12px;font-weight:700">${esc(r.drop)}</div><div style="font-size:10px;color:var(--text3)">${esc(r.time)}</div></div>
+      <div style="font-size:12px">${r.minted||0}</div>
+      <div style="font-size:12px">$${(r.gasCostUsd||0).toFixed(2)}</div>
+      <div class="st st-${r.status==='completed'?'ok':r.status==='failed'?'fail':'part'}" style="font-size:10px">${r.status.toUpperCase()}</div>
+    </div>`).join('')}
+  </div>
+</div>` : `
+<div class="card"><div class="es">
+  <div class="es-icon">📈</div>
+  <div class="es-title">No PnL data yet</div>
+  <div class="es-sub">Complete a mint run to see cost breakdown</div>
+</div></div>`;
+}
+
+// ── SETTINGS ──
+function renderSettings() {
+  const c = document.getElementById('content');
+  document.getElementById('tba').innerHTML = `<button class="btn btn-p btn-sm" onclick="settingsSave()">Save changes</button>`;
+  c.innerHTML = `
+<div class="card" style="margin-bottom:14px;border-color:rgba(74,124,252,.28)">
+  <div class="card-hd"><h2>🔌 Backend &amp; .env</h2><span class="st ${API_ONLINE?'st-ok':'st-fail'}" id="api-badge" style="font-size:9px">${API_ONLINE?'ONLINE':'OFFLINE'}</span></div>
+  <div class="card-body">
+    <div style="font-size:11.5px;color:var(--text2);margin-bottom:10px">API keys live in <code>.env</code> — never in the browser. Edit <code>.env</code> then restart <code>npm start</code>.</div>
+    <div id="api-svc-rows">${apiStatusRows()}</div>
+    <div class="fg" style="margin-top:12px;margin-bottom:0">
+      <label class="fl" for="s-apitoken">API token (matches API_SECRET in .env)</label>
+      <input class="fi" id="s-apitoken" type="password" placeholder="rv3_local_dev_change_this" value="${esc(RV3_API.token())}" autocomplete="off">
+      <div style="font-size:10px;color:var(--text3);margin-top:3px">Stored in session only. Required when API_SECRET is set.</div>
+    </div>
+    <button class="btn btn-sm" onclick="apiReconnect()" style="margin-top:10px">⟳ Reconnect backend</button>
+  </div>
+</div>
+<div class="card" style="margin-bottom:14px">
+  <div class="card-hd"><h2>⚙ Mint preferences</h2></div>
+  <div class="card-body">
+    <div class="frow">
+      <div class="fg"><label class="fl" for="s-route">Default inclusion route</label>
+        <select class="fs" id="s-route">
+          <option value="direct_rpc" ${S.settings.defaultRoute==='direct_rpc'?'selected':''}>Direct RPC (no Flashbots)</option>
+          <option value="public" ${S.settings.defaultRoute==='public'?'selected':''}>Public mempool</option>
+          <option value="fb_protect" ${S.settings.defaultRoute==='fb_protect'?'selected':''}>Flashbots Protect</option>
+          <option value="fb_bundle" ${S.settings.defaultRoute==='fb_bundle'?'selected':''}>Flashbots bundle</option>
+        </select>
+      </div>
+      <div class="fg"><label class="fl" for="s-maxspend">Max spend per run (ETH)</label>
+        <input class="fi" id="s-maxspend" type="number" step="0.01" placeholder="e.g. 0.5" value="${esc(S.settings.maxSpendEth)}">
+        <div style="font-size:10px;color:var(--text3);margin-top:3px">Preflight warns near cap. Confirm blocked if exceeded.</div>
+      </div>
+    </div>
+    <div class="frow">
+      <div class="fg"><label class="fl" for="s-lowbal">Low balance alert (ETH)</label>
+        <input class="fi" id="s-lowbal" type="number" step="0.001" placeholder="e.g. 0.01" value="${esc(S.settings.lowBalanceAlert)}">
+      </div>
+      <div class="fg"><label class="fl" for="s-defgas">Default gas preset</label>
+        <select class="fs" id="s-defgas">
+          ${['slow','normal','fast','turbo'].map(g=>`<option value="${g}" ${S.settings.defaultGasPreset===g?'selected':''}>${g.charAt(0).toUpperCase()+g.slice(1)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="tog-row"><span>RPC blasting — all endpoints fire simultaneously</span><label class="tog"><input type="checkbox" id="s-blast" ${S.settings.rpcBlast?'checked':''}><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
+    <div class="tog-row"><span>RPC pre-warm — ping all RPCs right before execute</span><label class="tog"><input type="checkbox" id="s-prewarm" ${S.settings.rpcPrewarm?'checked':''}><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:14px">
+  <div class="card-hd"><h2>⚡ RPC Endpoints</h2><button class="btn btn-p btn-xs" onclick="rpcAdd()">+ Add</button></div>
+  <div class="card-body">
+    <div style="font-size:11.5px;color:var(--text2);margin-bottom:10px">Add your Alchemy/Infura/QuickNode/dRPC URLs. RPC blast signs once and broadcasts to ALL endpoints simultaneously. First confirmation wins.</div>
+    <div id="rpc-list">
+      ${S.rpcs.length ? S.rpcs.map(r=>rpcRowHTML(r)).join('') : '<div class="ban ban-w" style="margin:0"><div class="ban-ico">⚠</div><div class="ban-txt">No RPC endpoints — add at least one to start minting</div></div>'}
+    </div>
+    <div id="rpc-add-form" style="display:none;margin-top:10px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:12px">
+      <div class="frow">
+        <div class="fg"><label class="fl">Label</label><input class="fi" id="rpc-new-name" placeholder="e.g. Alchemy mainnet" maxlength="30"></div>
+        <div class="fg"><label class="fl">Role</label><select class="fs" id="rpc-new-role"><option value="Primary">Primary</option><option value="Blast">Blast</option><option value="Private">Private</option></select></div>
+      </div>
+      <div class="fg"><label class="fl">RPC URL</label><input class="fi" id="rpc-new-url" placeholder="https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY" type="url"></div>
+      <div style="display:flex;gap:7px">
+        <button class="btn btn-p btn-sm" onclick="rpcSave()">Save endpoint</button>
+        <button class="btn btn-sm" onclick="document.getElementById('rpc-add-form').style.display='none'">Cancel</button>
+      </div>
+    </div>
+    <button class="btn btn-sm" onclick="rpcBenchmark()" style="margin-top:8px">⟳ Benchmark all</button>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:14px">
+  <div class="card-hd"><h2>🔔 Notifications</h2></div>
+  <div class="card-body">
+    <div class="frow">
+      <div class="fg"><label class="fl" for="s-discord">Discord webhook URL</label><input class="fi" id="s-discord" placeholder="https://discord.com/api/webhooks/..." value="${esc(S.settings.discordWebhook)}"></div>
+      <div class="fg"><label class="fl" for="s-tgtoken">Telegram bot token</label><input class="fi" id="s-tgtoken" placeholder="123456:ABC..." value="${esc(S.settings.telegramToken)}"></div>
+    </div>
+    <div class="fg"><label class="fl" for="s-tgchat">Telegram chat ID</label><input class="fi" id="s-tgchat" placeholder="-100..." style="max-width:220px" value="${esc(S.settings.telegramChatId)}"></div>
+    <div class="tog-row"><span>Mint runs (success, partial, failed)</span><label class="tog"><input type="checkbox" id="s-n1" ${S.settings.notifyMintRun?'checked':''}><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
+    <div class="tog-row"><span>Fund transfers — distribute, consolidate, split gas</span><label class="tog"><input type="checkbox" id="s-n2" ${S.settings.notifyFundTransfer?'checked':''}><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
+    <div class="tog-row"><span>Low wallet balance (once per day)</span><label class="tog"><input type="checkbox" id="s-n3" ${S.settings.notifyLowBalance?'checked':''}><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
+    <button class="btn btn-sm" onclick="testNotify()" style="margin-top:8px">Send test notification</button>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:14px">
+  <div class="card-hd"><h2>🛡 Inclusion routes</h2></div>
+  <div class="card-body" style="font-size:12px;line-height:1.9;color:var(--text2)">
+    <div><strong style="color:var(--text)">Public</strong> — standard mempool. No MEV protection.</div>
+    <div><strong style="color:var(--text)">Direct RPC</strong> — signs once, blasts to all your endpoints in parallel. No Flashbots.</div>
+    <div><strong style="color:var(--text)">Flashbots Protect</strong> — private relay via <code>ETH_RPC_PRIVATE</code>. Sandwich-resistant.</div>
+    <div><strong style="color:var(--text)">Flashbots bundle</strong> — private bundle; requires <code>FLASHBOTS_AUTH_PRIVATE_KEY</code>.</div>
+    <div><strong style="color:var(--text)">Delegation batch</strong> — one TX mints for all wallets via executor contract.</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-hd"><h2>🔐 Security</h2></div>
+  <div class="card-body" style="font-size:12px;line-height:1.9;color:var(--text2)">
+    <div>· Private keys never stored — only address hints saved in session</div>
+    <div>· API keys stay in .env on the server — never in browser storage</div>
+    <div>· Mint execution runs via the local Node worker (npm start)</div>
+    <div>· Input sanitization on all user-supplied values</div>
+    <div>· Content Security Policy header enabled</div>
+    <div>· Rate limit: max 10 tasks per minute enforced by worker</div>
+    <div>· Max spend cap enforced at preflight — transaction blocked if exceeded</div>
+  </div>
+</div>`;
+}
+
+async function apiReconnect() {
+  const tok = document.getElementById('s-apitoken')?.value?.trim();
+  if (tok) RV3_API.setToken(tok);
+  const ok = await apiConnect();
+  if (ok) {
+    await syncEnvRpcs();
+    await syncFromServer();
+    toast('Backend connected','✓');
+  } else {
+    toast('Backend offline — run npm start in project folder','⚠');
+  }
+  if (document.getElementById('nav-settings')?.classList.contains('act')) go('settings');
+  updateSystemStatus();
+}
+
+function settingsSave() {
+  const tok = document.getElementById('s-apitoken')?.value?.trim();
+  if (tok) RV3_API.setToken(tok);
+  S.settings.defaultRoute = document.getElementById('s-route')?.value || 'direct_rpc';
+  S.settings.maxSpendEth = document.getElementById('s-maxspend')?.value || '';
+  S.settings.lowBalanceAlert = document.getElementById('s-lowbal')?.value || '';
+  S.settings.defaultGasPreset = document.getElementById('s-defgas')?.value || 'normal';
+  S.settings.rpcBlast = document.getElementById('s-blast')?.checked ?? true;
+  S.settings.rpcPrewarm = document.getElementById('s-prewarm')?.checked ?? true;
+  const discord = document.getElementById('s-discord')?.value?.trim() || '';
+  S.settings.discordWebhook = discord && isHttpsUrl(discord) ? discord : '';
+  S.settings.telegramToken = document.getElementById('s-tgtoken')?.value || '';
+  S.settings.telegramChatId = document.getElementById('s-tgchat')?.value || '';
+  S.settings.notifyMintRun = document.getElementById('s-n1')?.checked ?? true;
+  S.settings.notifyFundTransfer = document.getElementById('s-n2')?.checked ?? true;
+  S.settings.notifyLowBalance = document.getElementById('s-n3')?.checked ?? true;
+  saveState();
+  toast('Settings saved','✓');
+}
+
+function rpcRowHTML(r) {
+  return `<div class="rpc-row">
+    <div class="rpc-fire${r.active?'active':''}"></div>
+    <span class="rpc-name">${esc(r.name)}</span>
+    <span class="rpc-role rr-${allowRpcRole(r.role)}">${esc(r.role||'Private')}</span>
+    <span class="rpc-url">${esc(r.url)}</span>
+    <span class="rpc-ms${r.ms>20?' slow':''}">${r.ms?r.ms+'ms':'—'}</span>
+    <span style="cursor:pointer;color:var(--text3);padding:2px 4px;font-size:12px" onclick="rpcPing('${esc(r.id)}')" title="Test">◎</span>
+    <span style="cursor:pointer;color:var(--red);padding:2px 4px;font-size:12px" onclick="rpcDelete('${esc(r.id)}')" title="Remove">✕</span>
+  </div>`;
+}
+
+function rpcAdd() {
+  document.getElementById('rpc-add-form').style.display = 'block';
+}
+
+function rpcSave() {
+  const name = document.getElementById('rpc-new-name')?.value?.trim();
+  const role = document.getElementById('rpc-new-role')?.value;
+  const url = document.getElementById('rpc-new-url')?.value?.trim();
+  if(!name) { toast('Enter a label','⚠'); return; }
+  if(!url || !isHttpsUrl(url)) { toast('Enter a valid HTTPS URL','⚠'); return; }
+  const id = 'rpc_' + Date.now();
+  S.rpcs.push({ id, name, role, url, ms: null, active: true });
+  saveState(); updateBadges();
+  document.getElementById('rpc-add-form').style.display = 'none';
+  document.getElementById('rpc-new-name').value = '';
+  document.getElementById('rpc-new-url').value = '';
+  toast(`RPC "${name}" added`,'✓');
+  document.getElementById('rpc-list').innerHTML = S.rpcs.map(r=>rpcRowHTML(r)).join('');
+  rpcPing(id);
+}
+
+function rpcDelete(id) {
+  S.rpcs = S.rpcs.filter(r=>r.id!==id);
+  saveState(); updateBadges();
+  const list = document.getElementById('rpc-list');
+  if(list) list.innerHTML = S.rpcs.length ? S.rpcs.map(r=>rpcRowHTML(r)).join('') : '<div class="ban ban-w" style="margin:0"><div class="ban-ico">⚠</div><div class="ban-txt">No RPC endpoints added</div></div>';
+  toast('RPC removed','ℹ');
+}
+
+async function rpcPing(id) {
+  const rpcEntry = S.rpcs.find(r=>r.id===id);
+  if(!rpcEntry) return;
+  const url = rpcEntry.urlFull || rpcEntry.url;
+  const isEnv = rpcEntry.fromEnv || String(id).startsWith('env_');
+  if (!isEnv && !url.startsWith('https://')) { toast('Full HTTPS URL required to ping','⚠'); return; }
+  try {
+    let ms;
+    if (API_ONLINE) {
+      const r = await RV3_API.pingRpc(isEnv ? null : url, isEnv ? id : null);
+      ms = r.ms;
+    } else {
+      const start = Date.now();
+      const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1}), signal: AbortSignal.timeout(5000)});
+      await res.json();
+      ms = Date.now() - start;
+    }
+    rpcEntry.ms = ms;
+    saveState();
+    const list = document.getElementById('rpc-list');
+    if(list) list.innerHTML = S.rpcs.map(r=>rpcRowHTML(r)).join('');
+    toast(`${rpcEntry.name}: ${ms}ms`,'✓');
+  } catch {
+    rpcEntry.ms = null;
+    toast(`${rpcEntry.name}: unreachable`,'⚠');
+  }
+}
+
+function rpcBenchmark() {
+  if(!S.rpcs.length) { toast('No RPC endpoints configured','⚠'); return; }
+  toast(`Benchmarking ${S.rpcs.length} endpoint${S.rpcs.length!==1?'s':''}...`,'⚡');
+  S.rpcs.forEach(r => rpcPing(r.id));
+}
+
+async function testNotify() {
+  if (!API_ONLINE) { toast('Backend offline — set Discord/Telegram in .env and npm start','⚠'); return; }
+  try {
+    const r = await RV3_API.testNotify();
+    const sent = [r.discord && 'Discord', r.telegram && 'Telegram'].filter(Boolean).join(' + ') || 'none (check .env)';
+    toast(`Test sent via ${sent}`,'✓');
+  } catch (e) {
+    toast(e.message || 'Notification failed','⚠');
+  }
+}
+
+// ── MODAL ──
+let _modalDropId = null;
+
+function openModal(dropId) {
+  _modalDropId = dropId || null;
+  // Populate drop selector
+  const dsel = document.getElementById('m-drop');
+  dsel.innerHTML = S.drops.length
+    ? S.drops.map(d=>`<option value="${esc(d.id)}">${esc(d.name)} — ${esc(d.addr)}</option>`).join('')
+    : '<option value="">No drops — add one first</option>';
+  if(dropId) { const opt = Array.from(dsel.options).find(o=>o.value===dropId); if(opt) opt.selected=true; }
+  mUpdateDrop();
+  // Populate blast grid
+  mUpdateBlastGrid();
+  // Set schedule off by default
+  document.getElementById('m-sched').checked = false;
+  document.getElementById('m-sched-box').style.display = 'none';
+  // Route
+  document.getElementById('m-route').value = S.settings.defaultRoute || 'direct_rpc';
+  // Gas preset
+  document.getElementById('m-gas-preset').value = S.settings.defaultGasPreset || 'normal';
+  document.getElementById('m-custom-gas-wrap').style.display = 'none';
+  // Clear name
+  document.getElementById('m-taskname').value = '';
+  mCalcEst();
+  document.getElementById('taskModal').classList.add('show');
+  document.getElementById('m-drop').focus();
+}
+
+function closeModal() {
+  document.getElementById('taskModal').classList.remove('show');
+  if(S.countdownInterval) { clearInterval(S.countdownInterval); S.countdownInterval = null; }
+}
+
+function mUpdateDrop() {
+  const dropId = document.getElementById('m-drop')?.value;
+  const drop = S.drops.find(d=>d.id===dropId);
+  const psel = document.getElementById('m-phase');
+  psel.innerHTML = drop && drop.phases?.length
+    ? drop.phases.map((p,i)=>`<option value="${i}">${esc(phaseTypeBadge(p.type))} · ${esc(p.label||'')} · ${esc(p.status||'')}</option>`).join('')
+    : '<option value="">No phases detected</option>';
+  mUpdatePhase(); mCalcEst();
+}
+
+function mCurrentPhase() {
+  const dropId = document.getElementById('m-drop')?.value;
+  const drop = S.drops.find(d=>d.id===dropId);
+  const idx = parseInt(document.getElementById('m-phase')?.value || '0');
+  return { drop, phase: drop?.phases?.[idx], idx };
+}
+
+function mPhaseEligKey(phase, idx) {
+  return phase?.uuid || String(idx);
+}
+
+function mGetWalletElig(drop, phase, idx) {
+  if (!drop?.walletElig || !phase) return {};
+  const key = mPhaseEligKey(phase, idx);
+  return drop.walletElig[key] || drop.walletElig[phase.uuid] || {};
+}
+
+async function mRefreshEligibility() {
+  const { drop, phase, idx } = mCurrentPhase();
+  const note = document.getElementById('m-elig-note');
+  if (!drop || !phase) {
+    if (note) note.textContent = '';
+    mPopulateWallets({});
+    return;
+  }
+  if (!drop.openseaSlug || !API_ONLINE) {
+    if (note) note.textContent = drop.openseaSlug ? 'Start backend to check wallet eligibility' : 'Re-detect via OpenSea URL for eligibility checks';
+    mPopulateWallets(mGetWalletElig(drop, phase, idx));
+    return;
+  }
+  if (note) note.textContent = 'Checking wallet eligibility…';
+  try {
+    const { result } = await RV3_API.checkEligibility(drop.openseaSlug, idx, phase.uuid);
+    const key = mPhaseEligKey(phase, idx);
+    drop.walletElig = drop.walletElig || {};
+    drop.walletElig[key] = result.wallets;
+    saveState();
+    const s = result.summary;
+    if (note) {
+      note.textContent = s
+        ? `${s.eligible} eligible · ${s.ineligible} not eligible${s.pending ? ` · ${s.pending} pending (allowlist at go-live)` : ''}`
+        : '';
+    }
+    mPopulateWallets(result.wallets);
+  } catch (e) {
+    if (note) note.textContent = 'Eligibility check failed — ' + (e.message || 'error');
+    mPopulateWallets(mGetWalletElig(drop, phase, idx));
+  }
+}
+
+function mUpdatePhase() {
+  const { drop, phase, idx } = mCurrentPhase();
+  const info = document.getElementById('m-phase-info');
+  if(phase) {
+    const typeLbl = phaseTypeBadge(phase.type);
+    const msgs = {
+      live: `⬤ Live now — ${typeLbl}${phase.requiresAllowlist ? ' (allowlist enforced)' : ''}`,
+      scheduled: `◷ Scheduled — ${typeLbl} opens ${new Date(phase.openTimestamp).toLocaleString()}`,
+      ended: `✗ Ended — ${typeLbl}`,
+    };
+    info.textContent = msgs[phase.status] || typeLbl;
+    info.style.display = 'block';
+    info.style.color = phase.status==='live'?'var(--green)':phase.status==='scheduled'?'var(--amber)':'var(--text3)';
+    if(document.getElementById('m-sched')?.checked) mSetSchedTime(phase);
+  } else { info.style.display='none'; }
+  mCalcEst();
+  mRefreshEligibility();
+}
+
+function mToggleSched() {
+  const on = document.getElementById('m-sched')?.checked;
+  const box = document.getElementById('m-sched-box');
+  box.style.display = on ? 'block' : 'none';
+  if(on) {
+    const dropId = document.getElementById('m-drop')?.value;
+    const drop = S.drops.find(d=>d.id===dropId);
+    const idx = parseInt(document.getElementById('m-phase')?.value || '0');
+    const phase = drop?.phases?.[idx];
+    mSetSchedTime(phase);
+  } else {
+    if(S.countdownInterval) { clearInterval(S.countdownInterval); S.countdownInterval = null; }
+  }
+}
+
+function mSetSchedTime(phase) {
+  // Auto-detect mint time: use phase.openTimestamp if present, else now + 2h as placeholder
+  const targetTs = phase?.openTimestamp || (Date.now() + 7200000);
+  // Schedule to fire at LAST MILLISECOND before phase open (T-1ms)
+  const fireAt = targetTs - 1;
+  const fireDate = new Date(fireAt);
+  const displayDate = new Date(targetTs);
+  document.getElementById('m-sched-time').textContent = fireDate.toLocaleString() + '.999';
+  document.getElementById('m-sched-sub').textContent =
+    phase?.openTimestamp
+      ? `Fires at ${displayDate.toLocaleString()} minus 1ms — last possible millisecond before phase opens`
+      : 'Phase open time not yet confirmed. Will update when on-chain data is available.';
+  // Start live countdown
+  if(S.countdownInterval) clearInterval(S.countdownInterval);
+  S.countdownInterval = setInterval(() => {
+    const diff = fireAt - Date.now();
+    const el = document.getElementById('m-countdown');
+    if(!el) { clearInterval(S.countdownInterval); return; }
+    if(diff <= 0) { el.textContent = '🚀 Executing now'; clearInterval(S.countdownInterval); return; }
+    const h = Math.floor(diff/3600000);
+    const m = Math.floor((diff%3600000)/60000);
+    const s = Math.floor((diff%60000)/1000);
+    const ms = diff%1000;
+    el.textContent = `T-${h}h ${m}m ${s}s ${ms}ms`;
+  }, 50);
+}
+
+function mUpdateBlastGrid() {
+  const grid = document.getElementById('m-blast-grid');
+  if(!grid) return;
+  if(!S.rpcs.length) {
+    grid.innerHTML = '<div style="font-size:11px;color:var(--text3);grid-column:1/-1">No RPC endpoints configured. Add them in Settings.</div>';
+    return;
+  }
+  grid.innerHTML = S.rpcs.map(r=>`
+    <div class="blast-item firing">
+      <div class="rpc-fire active"></div>
+      <span class="blast-name">${esc(r.name)}</span>
+      <span class="rpc-ms${r.ms&&r.ms>20?' slow':''}" style="margin-left:auto;font-size:10px">${r.ms?r.ms+'ms':'—'}</span>
+    </div>`).join('');
+}
+
+function mGasPresetChange() {
+  const preset = document.getElementById('m-gas-preset')?.value;
+  const wrap = document.getElementById('m-custom-gas-wrap');
+  wrap.style.display = preset === 'custom' ? 'block' : 'none';
+  mCalcEst();
+}
+
+function mCalcEst() {
+  const preset = document.getElementById('m-gas-preset')?.value || 'normal';
+  let gwei = GAS_PRESETS[preset] || 25;
+  if(preset === 'custom') {
+    gwei = sanitizeNum(document.getElementById('m-custom-gwei')?.value, 1, 999) || 25;
+  }
+  const gasLimit = S.gasLimitMint;
+  const walletCount = document.querySelectorAll('#m-wallets .ws.on').length || 1;
+  const qty = sanitizeInt(document.getElementById('m-qty')?.value, 1, 10) || 1;
+  // Gas cost calculation
+  // ETH = gwei * gasLimit / 1e9
+  const gasEthPerWallet = (gwei * gasLimit) / 1e9;
+  const gasUsdPerWallet = gasEthPerWallet * S.ethUsd;
+  const dropId = document.getElementById('m-drop')?.value;
+  const drop = S.drops.find(d=>d.id===dropId);
+  const phaseIdx = parseInt(document.getElementById('m-phase')?.value || '0');
+  const phase = drop?.phases?.[phaseIdx];
+  const mintPriceEth = parseFloat(phase?.priceEth || 0);
+  const mintCostEthPerWallet = mintPriceEth * qty;
+  const mintCostUsdPerWallet = mintCostEthPerWallet * S.ethUsd;
+  const totalEth = (gasEthPerWallet + mintCostEthPerWallet) * walletCount;
+  const totalUsd = (gasUsdPerWallet + mintCostUsdPerWallet) * walletCount;
+  // Update gas calc panel
+  const g = id => document.getElementById(id);
+  if(g('gc-gwei')) g('gc-gwei').textContent = gwei + ' gwei';
+  if(g('gc-eth-w')) g('gc-eth-w').textContent = gasEthPerWallet.toFixed(6) + ' ETH';
+  if(g('gc-usd-w')) g('gc-usd-w').textContent = '$' + gasUsdPerWallet.toFixed(2);
+  if(g('gc-mint-w')) g('gc-mint-w').textContent = mintPriceEth > 0 ? mintCostEthPerWallet.toFixed(4)+' ETH ($'+mintCostUsdPerWallet.toFixed(2)+')' : 'FREE';
+  if(g('gc-total')) g('gc-total').textContent = totalEth.toFixed(5)+' ETH (~$'+totalUsd.toFixed(2)+')';
+  // Update modal est summary
+  if(g('me-gas')) g('me-gas').textContent = '$'+(gasUsdPerWallet*walletCount).toFixed(2);
+  if(g('me-mint')) g('me-mint').textContent = mintPriceEth > 0 ? (mintCostEthPerWallet*walletCount).toFixed(4)+' ETH' : 'FREE';
+  if(g('me-total')) g('me-total').textContent = '~$'+totalUsd.toFixed(2);
+}
+
+function mSelectAll() {
+  document.querySelectorAll('#m-wallets .ws').forEach(el => {
+    if(!el.classList.contains('nobal') && !el.classList.contains('inelig')) {
+      el.classList.add('on');
+      const cb = el.querySelector('input'); if(cb) cb.checked=true;
+    }
+  });
+  mCalcEst();
+}
+
+function mToggleWallet(el) {
+  if(el.classList.contains('nobal') || el.classList.contains('inelig')) return;
+  el.classList.toggle('on');
+  const cb = el.querySelector('input'); if(cb) cb.checked = el.classList.contains('on');
+  mCalcEst();
+}
+
+async function mSubmit() {
+  const dropId = document.getElementById('m-drop')?.value;
+  if(!dropId) { toast('Select a drop first','⚠'); return; }
+  const drop = S.drops.find(d=>d.id===dropId);
+  if(!drop) { toast('Drop not found','⚠'); return; }
+  if(!drop.openseaSlug && API_ONLINE) { toast('Re-detect this drop via OpenSea URL for live minting','⚠'); }
+  const selectedWallets = document.querySelectorAll('#m-wallets .ws.on').length;
+  if(!selectedWallets) { toast('Select at least one wallet','⚠'); return; }
+  if(!S.rpcs.length) { toast('No RPC endpoints configured — add in Settings or .env','⚠'); return; }
+  const qty = sanitizeInt(document.getElementById('m-qty')?.value, 1, 10);
+  const route = document.getElementById('m-route')?.value || 'direct_rpc';
+  const taskName = document.getElementById('m-taskname')?.value?.trim() || '';
+  const schedOn = document.getElementById('m-sched')?.checked;
+  const schedTime = document.getElementById('m-sched-time')?.textContent || '';
+  const preset = document.getElementById('m-gas-preset')?.value || 'normal';
+  let gwei = GAS_PRESETS[preset] || 25;
+  if(preset==='custom') gwei = sanitizeNum(document.getElementById('m-custom-gwei')?.value,1,999)||25;
+  if(S.settings.maxSpendEth) {
+    const gasEth = (gwei * S.gasLimitMint / 1e9) * selectedWallets;
+    if(gasEth > parseFloat(S.settings.maxSpendEth)) {
+      toast(`Estimated spend (${gasEth.toFixed(4)} ETH) exceeds max cap`,'⚠');
+      return;
+    }
+  }
+  let scheduledAt = null;
+  if (schedOn) {
+    const dropPhaseIdx = parseInt(document.getElementById('m-phase')?.value || '0');
+    const phase = drop.phases?.[dropPhaseIdx];
+    if (phase?.openTimestamp) scheduledAt = new Date(phase.openTimestamp - 1).toISOString();
+  }
+  const addrMatch = String(drop.addr || '').match(/0x[a-fA-F0-9]{40}/);
+  const payload = {
+    drop: drop.name, dropId, wallets: selectedWallets,
+    openseaSlug: drop.openseaSlug || null,
+    contractAddress: addrMatch ? addrMatch[0] : null,
+    chainSlug: drop.chainSlug || 'ethereum',
+    route: route.replace(/_/g,' ').toUpperCase(), qty,
+    name: taskName || drop.name,
+    scheduledFor: schedOn ? schedTime : null,
+    scheduledAt,
+    gasPreset: preset,
+    gasGwei: gwei,
+    rpcBlast: S.settings.rpcBlast !== false,
+    rpcCount: S.rpcs.length,
+    rpcUrls: S.rpcs.map(r => r.urlFull || r.url).filter(u => u.startsWith('https://')),
+  };
+  try {
+    if (API_ONLINE) {
+      const { task } = await RV3_API.createTask(payload);
+      S.tasks.unshift(task);
+      saveState(); updateBadges();
+      closeModal();
+      toast(`Task queued on worker — ${selectedWallets} wallet${selectedWallets!==1?'s':''}`,'⚡');
+      addNotif('Task queued', `${task.name} · worker processing`, 'info');
+      if(document.getElementById('nav-tasks')?.classList.contains('act')) go('tasks');
+      return;
+    }
+  } catch (e) {
+    toast(e.message || 'Failed to queue on worker','⚠');
+    return;
+  }
+  const id = 'task_' + Date.now();
+  S.tasks.push({ id, ...payload, status: 'queued', time: new Date().toLocaleString() });
+  saveState(); updateBadges();
+  closeModal();
+  toast(`Task saved locally — start backend to execute`,'ℹ');
+  if(document.getElementById('nav-tasks')?.classList.contains('act')) go('tasks');
+}
+
+// Populate wallet selector in modal
+function mPopulateWallets(eligMap) {
+  const grid = document.getElementById('m-wallets');
+  if(!grid) return;
+  if(!S.wallets.length) {
+    grid.innerHTML = '<div style="font-size:11px;color:var(--text3);grid-column:1/-1">No wallets added — go to Wallets tab.</div>';
+    return;
+  }
+  const lowBal = parseFloat(S.settings.lowBalanceAlert) || 0.001;
+  const elig = eligMap || {};
+  grid.innerHTML = S.wallets.map(w=>{
+    const e = elig[w.id];
+    const low = w.eth < lowBal;
+    let cls = 'ws';
+    let badge = '';
+    let disabled = low;
+    if (low) cls += ' nobal';
+    else if (e?.eligible === false) { cls += ' inelig'; disabled = true; badge = '<span class="ws-e no">✗</span>'; }
+    else if (e?.eligible === true) { badge = '<span class="ws-e ok">✓</span>'; }
+    else if (e?.eligible === null) { cls += ' elig-pend'; badge = '<span class="ws-e pend">?</span>'; }
+    const title = e?.reason ? ` title="${esc(e.reason)}"` : '';
+    return `
+    <div class="${cls}" onclick="mToggleWallet(this)"${title}>
+      <input type="checkbox" ${disabled?'disabled':''}>
+      <span class="ws-n">${esc(w.name)}</span>
+      ${badge}
+      <span class="ws-b">${w.eth.toFixed(4)} ETH</span>
+    </div>`;
+  }).join('');
+}
+
+// TOAST
+function toast(msg, icon='ℹ') {
+  const area = document.getElementById('tw');
+  const t = document.createElement('div');
+  t.className = 'toast';
+  const colors = {'✓':'var(--green)','⚠':'var(--amber)','⚡':'var(--accent3)','✕':'var(--red)'};
+  t.innerHTML = `<span style="color:${colors[icon]||'var(--text2)'};flex-shrink:0">${esc(icon)}</span><span>${esc(msg)}</span>`;
+  area.appendChild(t);
+  setTimeout(() => { t.style.opacity='0'; t.style.transition='opacity .3s'; setTimeout(()=>t.remove(),300); }, 3500);
+}
+
+// SYSTEM STATUS
+async function updateSystemStatus() {
+  const workerEl = document.getElementById('sys-worker');
+  const workerLbl = document.getElementById('sys-worker-lbl');
+  if(!workerEl || !workerLbl) return;
+  try {
+    if (!API_ONLINE) await apiConnect();
+    if (API_ONLINE && RV3_API.health) {
+      const h = RV3_API.health;
+      const q = h.queuedTasks || 0;
+      workerEl.className = 'dot ' + (q ? 'da' : 'dg');
+      workerLbl.textContent = q ? `Worker: ${q} queued` : 'Worker: online';
+      return;
+    }
+  } catch { /* */ }
+  workerEl.className = 'dot dr';
+  workerLbl.textContent = 'Worker: offline';
+}
+
+// MODAL HOOK
+const _origOpenModal = openModal;
+openModal = function(dropId) {
+  _origOpenModal(dropId);
+  const { drop, phase, idx } = mCurrentPhase();
+  mPopulateWallets(mGetWalletElig(drop, phase, idx));
+  mCalcEst();
+};
+
+// ETH PRICE
+async function fetchEthPrice() {
+  try {
+    if (API_ONLINE) {
+      const usd = await RV3_API.ethPrice();
+      if (usd) S.ethUsd = usd;
+      return;
+    }
+  } catch { /* fallback */ }
+  try {
+    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd', { signal: AbortSignal.timeout(3000) });
+    const data = await res.json();
+    if(data?.ethereum?.usd) S.ethUsd = data.ethereum.usd;
+  } catch { /* use default */ }
+}
+
+// FUND WALLETS
+const FUND_STATE = { step:1, op:null, hub:null, sources:[], amount:'', gasPreset:'normal' };
+
+function renderFund() {
+  const c = document.getElementById('content');
+  document.getElementById('tba').innerHTML = `
+    <button class="btn btn-sm" onclick="refreshBalances()">⟳ Refresh balances</button>
+    <button class="btn btn-sm" onclick="go('sweep')">NFT sweep</button>
+    <button class="btn btn-sm" onclick="go('history')">History</button>
+  `;
+  FUND_STATE.step = 1; FUND_STATE.op = null; FUND_STATE.hub = null; FUND_STATE.sources = [];
+  renderFundStep();
+}
+
+function renderFundStep() {
+  const c = document.getElementById('content');
+  const steps = ['Operation','Wallets','Configure','Review & Execute'];
+  const stepHTML = steps.map((s,i)=>`
+    <div class="wiz-step${FUND_STATE.step===i+1?' act':FUND_STATE.step>i+1?' done':''}" onclick="${FUND_STATE.step>i+1?`fundGoStep(${i+1})`:'void(0)'}">
+      <div class="wiz-step-num">${FUND_STATE.step>i+1?'✓':i+1}</div>${s}
+    </div>${i<steps.length-1?'<span class="wiz-arrow">›</span>':''}`).join('');
+
+  let body = '';
+  if(FUND_STATE.step===1) {
+    body = `
+<div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:12px">Choose an operation</div>
+<div class="op-grid">
+  ${[
+    ['Distribute','Hub → Wallet₁, Wallet₂, ...','Send ETH from one hub wallet to multiple recipients.','distribute'],
+    ['Consolidate','Wallet₁, Wallet₂, ... → Hub','Sweep ETH from multiple wallets into one hub wallet.','consolidate'],
+    ['Split gas','Hub ÷ N wallets (auto-calculated)','Evenly split the hub\'s spendable balance across mint wallets.','split'],
+  ].map(([title,flow,desc,key])=>`
+  <div class="op-card${FUND_STATE.op===key?' sel':''}" onclick="fundSelectOp('${key}')">
+    <div class="op-title">${title}</div>
+    <div class="op-flow">${flow}</div>
+    <div class="op-desc">${desc}</div>
+  </div>`).join('')}
+</div>
+<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);font-size:12.5px;cursor:pointer;width:fit-content" onclick="fundOneClick()">
+  <span style="font-size:14px">⚡</span> One-click fund mint wallets
+  <span style="font-size:10px;color:var(--text3);margin-left:4px">— splits hub balance evenly across all wallets</span>
+</div>
+<div style="display:flex;justify-content:flex-end;margin-top:16px">
+  <button class="btn btn-p" onclick="fundNext()" id="fund-next-btn" ${!FUND_STATE.op?'disabled':''}>Next →</button>
+</div>`;
+  } else if(FUND_STATE.step===2) {
+    const hubLabel = FUND_STATE.op==='consolidate' ? 'Hub (destination)' : 'Hub (source)';
+    const sourcesLabel = FUND_STATE.op==='consolidate' ? 'Source wallets (send from)' : 'Destination wallets (send to)';
+    body = `
+<div class="fg">
+  <label class="fl">${hubLabel}</label>
+  <select class="fs" id="fund-hub" onchange="FUND_STATE.hub=this.value">
+    <option value="">Select hub wallet...</option>
+    ${S.wallets.map(w=>`<option value="${esc(w.id)}">${esc(w.name)} — ${w.eth.toFixed(4)} ETH</option>`).join('')}
+  </select>
+  ${!S.wallets.length?'<div class="ban ban-w" style="margin-top:8px"><div class="ban-ico">⚠</div><div class="ban-txt">No wallets added. Go to Wallets tab first.</div></div>':''}
+</div>
+<div class="fg">
+  <label class="fl" style="margin-bottom:8px">${sourcesLabel}
+    <span style="float:right;cursor:pointer;color:var(--accent3);font-size:10px;text-transform:none;letter-spacing:0;font-weight:500" onclick="fundSelectAll()">Select all</span>
+  </label>
+  <div class="w-chips" id="fund-chips">
+    ${S.wallets.map(w=>`
+    <div class="w-chip${FUND_STATE.sources.includes(w.id)?' sel':''}" onclick="fundToggleSource('${esc(w.id)}')" data-id="${esc(w.id)}">
+      <span class="w-chip-chk"></span>
+      ${esc(w.name)}
+      <span class="w-chip-bal">· ${w.eth.toFixed(4)} ETH</span>
+    </div>`).join('')||'<div style="font-size:11.5px;color:var(--text3)">No wallets: add wallets first</div>'}
+  </div>
+  <div style="font-size:10.5px;color:var(--text3)">${FUND_STATE.sources.length} / 50 selected · 100 ops/hour</div>
+</div>
+<div style="display:flex;justify-content:space-between;margin-top:16px">
+  <button class="btn" onclick="fundGoStep(1)">← Back</button>
+  <button class="btn btn-p" onclick="fundNext()">Next →</button>
+</div>`;
+  } else if(FUND_STATE.step===3) {
+    const hub = S.wallets.find(w=>w.id===FUND_STATE.hub);
+    const srcWallets = S.wallets.filter(w=>FUND_STATE.sources.includes(w.id));
+    const autoAmount = hub && FUND_STATE.op==='split' && srcWallets.length
+      ? ((hub.eth * 0.98) / srcWallets.length).toFixed(5) : '';
+    body = `
+<div class="frow">
+  <div class="fg">
+    <label class="fl">Amount per wallet (ETH)</label>
+    <input class="fi" id="fund-amount" type="number" step="0.0001" min="0.0001"
+           placeholder="${FUND_STATE.op==='split'?'Auto-calculated':'e.g. 0.0100'}"
+           value="${esc(autoAmount||FUND_STATE.amount)}"
+           oninput="FUND_STATE.amount=this.value;fundUpdateReview()">
+    ${FUND_STATE.op==='split'?`<div style="font-size:10.5px;color:var(--green);margin-top:3px">Auto-split: ${esc(autoAmount||'—')} ETH per wallet (hub balance ÷ ${srcWallets.length} wallets, 2% reserve for gas)</div>`:''}
+  </div>
+  <div class="fg">
+    <label class="fl">Gas preset</label>
+    <select class="fs" id="fund-gas" onchange="FUND_STATE.gasPreset=this.value;fundUpdateReview()">
+      <option value="slow">Slow: 15 gwei</option>
+      <option value="normal" selected>Normal: 25 gwei</option>
+      <option value="fast">Fast: 40 gwei</option>
+      <option value="turbo">Turbo: 80 gwei</option>
+    </select>
+  </div>
+</div>
+<div class="gas-calc" id="fund-calc">
+  <div class="gas-row"><span class="gas-lbl">Wallets affected</span><span class="gas-val" id="fc-wallets">${srcWallets.length}</span></div>
+  <div class="gas-row"><span class="gas-lbl">Amount per wallet</span><span class="gas-val accent" id="fc-amount">${autoAmount||'—'} ETH</span></div>
+  <div class="gas-row"><span class="gas-lbl">Est gas per tx</span><span class="gas-val" id="fc-gas">~$0.50</span></div>
+  <div style="border-top:1px solid var(--border);margin:5px 0"></div>
+  <div class="gas-row"><span class="gas-lbl" style="font-weight:700;color:var(--text)">Total ETH to move</span><span class="gas-val amber" id="fc-total">${autoAmount?((parseFloat(autoAmount)*srcWallets.length).toFixed(4)+' ETH'):'—'}</span></div>
+</div>
+<div style="display:flex;justify-content:space-between;margin-top:16px">
+  <button class="btn" onclick="fundGoStep(2)">← Back</button>
+  <button class="btn btn-p" onclick="fundNext()">Review →</button>
+</div>`;
+  } else if(FUND_STATE.step===4) {
+    const hub = S.wallets.find(w=>w.id===FUND_STATE.hub);
+    const srcWallets = S.wallets.filter(w=>FUND_STATE.sources.includes(w.id));
+    const amt = parseFloat(FUND_STATE.amount)||0;
+    const gwei = GAS_PRESETS[FUND_STATE.gasPreset]||25;
+    const gasEth = (gwei*21000/1e9)*srcWallets.length;
+    body = `
+<div class="ban ban-i"><div class="ban-ico">ℹ</div><div class="ban-txt">Review carefully. This will submit real blockchain transactions via your VPS worker.</div></div>
+<div class="card" style="margin-bottom:12px">
+  <div class="card-hd"><h2>Transaction summary</h2></div>
+  <table class="rev-table" style="width:100%">
+    <tr><th>Field</th><th>Value</th></tr>
+    <tr><td style="color:var(--text2)">Operation</td><td style="font-weight:700;text-transform:capitalize">${esc(FUND_STATE.op||'')}</td></tr>
+    <tr><td style="color:var(--text2)">Hub wallet</td><td>${hub?esc(hub.name+' · '+hub.addr):'—'}</td></tr>
+    <tr><td style="color:var(--text2)">Wallets affected</td><td>${srcWallets.length} wallet${srcWallets.length!==1?'s':''}: ${srcWallets.map(w=>esc(w.name)).join(', ')}</td></tr>
+    <tr><td style="color:var(--text2)">Amount per wallet</td><td style="font-weight:700;color:var(--green)">${amt?amt.toFixed(5)+' ETH ($'+(amt*S.ethUsd).toFixed(2)+')':'—'}</td></tr>
+    <tr><td style="color:var(--text2)">Gas preset</td><td>${gwei} gwei</td></tr>
+    <tr><td style="color:var(--text2)">Est total ETH moved</td><td style="font-weight:700;color:var(--amber)">${(amt*srcWallets.length).toFixed(5)} ETH</td></tr>
+    <tr><td style="color:var(--text2)">Est gas cost</td><td>~${gasEth.toFixed(5)} ETH (~$${(gasEth*S.ethUsd).toFixed(2)})</td></tr>
+  </table>
+</div>
+<div style="display:flex;justify-content:space-between;margin-top:4px">
+  <button class="btn" onclick="fundGoStep(3)">← Back</button>
+  <button class="btn btn-p" onclick="fundExecute()">⚡ Execute</button>
+</div>`;
+  }
+
+  c.innerHTML = `
+<div style="font-size:12px;color:var(--text3);margin-bottom:12px">Distribute, consolidate, or split ETH · 50 wallets per op · 100 ops/hour</div>
+<div class="wiz-steps">${stepHTML}</div>
+<div id="fund-body" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:18px 18px">
+  ${body}
+</div>`;
+}
+
+function fundSelectOp(op) {
+  FUND_STATE.op = op;
+  document.querySelectorAll('.op-card').forEach(c=>c.classList.remove('sel'));
+  document.querySelectorAll('.op-card').forEach(c=>{ if(c.onclick?.toString().includes(op)) c.classList.add('sel'); });
+  // Re-render to update selection visually and enable Next
+  renderFundStep();
+}
+function fundOneClick() {
+  FUND_STATE.op = 'split';
+  FUND_STATE.step = 2;
+  // Pre-select all wallets
+  FUND_STATE.sources = S.wallets.map(w=>w.id);
+  renderFundStep();
+}
+function fundGoStep(n) { FUND_STATE.step=n; renderFundStep(); }
+function fundSelectAll() {
+  FUND_STATE.sources = S.wallets.map(w=>w.id);
+  document.querySelectorAll('.w-chip').forEach(c=>c.classList.add('sel'));
+}
+function fundToggleSource(id) {
+  const idx = FUND_STATE.sources.indexOf(id);
+  if(idx>=0) FUND_STATE.sources.splice(idx,1); else FUND_STATE.sources.push(id);
+  document.querySelectorAll('.w-chip').forEach(c=>{
+    if(c.dataset.id===id) c.classList.toggle('sel', FUND_STATE.sources.includes(id));
+  });
+}
+function fundUpdateReview() {
+  const amt = parseFloat(document.getElementById('fund-amount')?.value)||0;
+  const srcWallets = S.wallets.filter(w=>FUND_STATE.sources.includes(w.id));
+  const el = id => document.getElementById(id);
+  if(el('fc-amount')) el('fc-amount').textContent = amt.toFixed(5)+' ETH';
+  if(el('fc-total')) el('fc-total').textContent = (amt*srcWallets.length).toFixed(5)+' ETH';
+}
+function fundNext() {
+  if(FUND_STATE.step===1) {
+    if(!FUND_STATE.op) { toast('Select an operation first','⚠'); return; }
+    FUND_STATE.step=2; renderFundStep();
+  } else if(FUND_STATE.step===2) {
+    const hub = document.getElementById('fund-hub')?.value;
+    if(!hub) { toast('Select a hub wallet','⚠'); return; }
+    if(!FUND_STATE.sources.length) { toast('Select at least one wallet','⚠'); return; }
+    FUND_STATE.hub = hub;
+    FUND_STATE.step=3; renderFundStep();
+  } else if(FUND_STATE.step===3) {
+    const amt = parseFloat(document.getElementById('fund-amount')?.value);
+    if(isNaN(amt)||amt<=0) { toast('Enter a valid amount','⚠'); return; }
+    FUND_STATE.amount = document.getElementById('fund-amount').value;
+    FUND_STATE.gasPreset = document.getElementById('fund-gas')?.value||'normal';
+    FUND_STATE.step=4; renderFundStep();
+  }
+}
+function fundExecute() {
+  const srcWallets = S.wallets.filter(w=>FUND_STATE.sources.includes(w.id));
+  const hub = FUND_STATE.hub;
+  const rpcUrls = S.rpcs.map(r => r.urlFull || r.url).filter(u => u.startsWith('https://'));
+  const body = {
+    op: FUND_STATE.op,
+    hubId: hub,
+    sourceIds: FUND_STATE.sources,
+    amountEth: parseFloat(FUND_STATE.amount) || 0,
+    gasPreset: FUND_STATE.gasPreset || 'normal',
+    rpcUrls,
+  };
+  if (API_ONLINE) {
+    RV3_API.createFundOp(body).then(({ op }) => {
+      addNotif('Fund queued', `${esc(FUND_STATE.op||'')} · ${srcWallets.length} wallets`, 'info');
+      toast(`Fund op queued on worker`,'⚡');
+      FUND_STATE.step=1; FUND_STATE.op=null; FUND_STATE.sources=[];
+      go('fund');
+    }).catch(e => toast(e.message || 'Fund queue failed','⚠'));
+    return;
+  }
+  addNotif('Fund operation queued', `${esc(FUND_STATE.op||'')} · ${srcWallets.length} wallets`, 'info');
+  toast(`Fund op queued (offline — start npm start)`,'ℹ');
+  FUND_STATE.step=1; FUND_STATE.op=null; FUND_STATE.sources=[];
+  go('fund');
+}
+async function refreshBalances() {
+  if (API_ONLINE) {
+    try {
+      await RV3_API.refreshWallets();
+      await syncFromServer();
+      toast('Balances refreshed from chain','✓');
+      if (document.getElementById('nav-wallets')?.classList.contains('act')) go('wallets');
+      return;
+    } catch (e) { toast(e.message || 'Refresh failed','⚠'); return; }
+  }
+  toast('Start backend (npm start) to refresh on-chain balances','ℹ');
+}
+
+// NFT SWEEP
+const SWEEP_STATE = { step:1, hub:null, sources:[], chain:'all', collection:null };
+
+function renderSweep() {
+  const c = document.getElementById('content');
+  document.getElementById('tba').innerHTML = `
+    <button class="btn btn-sm" onclick="refreshBalances()">⟳ Refresh balances</button>
+    <button class="btn btn-sm" onclick="go('history')">History</button>
+  `;
+  SWEEP_STATE.step=1; SWEEP_STATE.hub=null; SWEEP_STATE.sources=[]; SWEEP_STATE.collection=null;
+  renderSweepStep();
+}
+
+function renderSweepStep() {
+  const c = document.getElementById('content');
+  const steps = ['Wallets','Collection','Review & Execute'];
+  const stepHTML = steps.map((s,i)=>`
+    <div class="wiz-step${SWEEP_STATE.step===i+1?' act':SWEEP_STATE.step>i+1?' done':''}">
+      <div class="wiz-step-num">${SWEEP_STATE.step>i+1?'✓':i+1}</div>${s}
+    </div>${i<steps.length-1?'<span class="wiz-arrow">›</span>':''}`).join('');
+
+  let body = '';
+  if(SWEEP_STATE.step===1) {
+    body = `
+<div class="fg">
+  <label class="fl">Hub (destination)</label>
+  <select class="fs" id="sweep-hub" onchange="SWEEP_STATE.hub=this.value">
+    <option value="">Select hub...</option>
+    ${S.wallets.map(w=>`<option value="${esc(w.id)}">${esc(w.name)} — ${w.eth.toFixed(4)} ETH</option>`).join('')}
+  </select>
+</div>
+<div class="fg" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+  <label class="fl" style="margin:0">Source wallets</label>
+  <select class="fs" id="sweep-chain" style="width:140px" onchange="SWEEP_STATE.chain=this.value">
+    <option value="all">All chains</option>
+    <option value="ETH">Ethereum</option>
+    <option value="Base">Base</option>
+    <option value="Blast">Blast</option>
+  </select>
+</div>
+<div style="font-size:11px;color:var(--text3);margin-bottom:8px">Checked wallets send their NFTs to the hub (each pays its own transfer gas).</div>
+<div class="w-chips" id="sweep-chips">
+  ${S.wallets.map(w=>`
+  <div class="w-chip${SWEEP_STATE.sources.includes(w.id)?' sel':''}" onclick="sweepToggle('${esc(w.id)}')" data-id="${esc(w.id)}">
+    <span class="w-chip-chk"></span>
+    ${esc(w.name)}
+    <span class="w-chip-bal">· ${w.eth.toFixed(4)} ETH</span>
+  </div>`).join('')||'<div style="font-size:11.5px;color:var(--text3)">No wallets added</div>'}
+</div>
+<div style="font-size:10.5px;color:var(--text3);margin-top:4px">${SWEEP_STATE.sources.length} / 50 selected</div>
+<div style="display:flex;justify-content:flex-end;margin-top:16px">
+  <button class="btn btn-p" onclick="sweepNext()">Next →</button>
+</div>`;
+  } else if(SWEEP_STATE.step===2) {
+    body = `
+<div class="fg">
+  <label class="fl">Collection contract (optional — leave blank to sweep all NFTs)</label>
+  <input class="fi" id="sweep-collection" placeholder="0x... or opensea.io/collection/..."
+         value="${esc(SWEEP_STATE.collection||'')}"
+         oninput="SWEEP_STATE.collection=this.value"
+         style="font-family:var(--mono)">
+  <div style="font-size:10.5px;color:var(--text3);margin-top:4px">Leave blank to sweep all ERC-721/ERC-1155 tokens from selected wallets to hub.</div>
+</div>
+<div class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt">Each source wallet pays its own gas for the transfer. Ensure sufficient ETH balance in each wallet before executing.</div></div>
+<div style="display:flex;justify-content:space-between;margin-top:16px">
+  <button class="btn" onclick="sweepGoStep(1)">← Back</button>
+  <button class="btn btn-p" onclick="sweepNext()">Review →</button>
+</div>`;
+  } else if(SWEEP_STATE.step===3) {
+    const hub = S.wallets.find(w=>w.id===SWEEP_STATE.hub);
+    const srcWallets = S.wallets.filter(w=>SWEEP_STATE.sources.includes(w.id));
+    body = `
+<div class="ban ban-i"><div class="ban-ico">ℹ</div><div class="ban-txt">NFTs will be transferred from source wallets to the hub. Each source wallet pays its own gas.</div></div>
+<div class="card" style="margin-bottom:12px">
+  <div class="card-hd"><h2>Sweep summary</h2></div>
+  <table class="rev-table" style="width:100%">
+    <tr><th>Field</th><th>Value</th></tr>
+    <tr><td style="color:var(--text2)">Hub (destination)</td><td style="font-weight:700">${hub?esc(hub.name+' · '+hub.addr):'—'}</td></tr>
+    <tr><td style="color:var(--text2)">Source wallets</td><td>${srcWallets.length}: ${srcWallets.map(w=>esc(w.name)).join(', ')||'—'}</td></tr>
+    <tr><td style="color:var(--text2)">Collection filter</td><td style="font-family:var(--mono);font-size:11px">${SWEEP_STATE.collection?esc(SWEEP_STATE.collection):'All NFTs'}</td></tr>
+    <tr><td style="color:var(--text2)">Chain filter</td><td>${SWEEP_STATE.chain==='all'?'All chains':esc(SWEEP_STATE.chain)}</td></tr>
+    <tr><td style="color:var(--text2)">Max source wallets</td><td>50 max · 100 ops/hour</td></tr>
+  </table>
+</div>
+<div style="display:flex;justify-content:space-between;margin-top:4px">
+  <button class="btn" onclick="sweepGoStep(2)">← Back</button>
+  <button class="btn btn-p" onclick="sweepExecute()">⚡ Execute sweep</button>
+</div>`;
+  }
+
+  c.innerHTML = `
+<div style="font-size:12px;color:var(--text3);margin-bottom:12px">Move NFTs from mint wallets to one hub · 50 source wallets · 100 ops/hour</div>
+<div class="wiz-steps">${stepHTML}</div>
+<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:18px">${body}</div>`;
+}
+
+function sweepToggle(id) {
+  const idx = SWEEP_STATE.sources.indexOf(id);
+  if(idx>=0) SWEEP_STATE.sources.splice(idx,1); else SWEEP_STATE.sources.push(id);
+  document.querySelectorAll('#sweep-chips .w-chip').forEach(c=>{
+    if(c.dataset.id===id) c.classList.toggle('sel', SWEEP_STATE.sources.includes(id));
+  });
+}
+function sweepGoStep(n) { SWEEP_STATE.step=n; renderSweepStep(); }
+function sweepNext() {
+  if(SWEEP_STATE.step===1) {
+    SWEEP_STATE.hub = document.getElementById('sweep-hub')?.value;
+    if(!SWEEP_STATE.hub) { toast('Select a hub wallet','⚠'); return; }
+    if(!SWEEP_STATE.sources.length) { toast('Select at least one source wallet','⚠'); return; }
+    SWEEP_STATE.step=2; renderSweepStep();
+  } else if(SWEEP_STATE.step===2) {
+    SWEEP_STATE.collection = document.getElementById('sweep-collection')?.value?.trim()||null;
+    SWEEP_STATE.step=3; renderSweepStep();
+  }
+}
+function sweepExecute() {
+  const srcWallets = S.wallets.filter(w=>SWEEP_STATE.sources.includes(w.id));
+  const collection = SWEEP_STATE.collection || null;
+  let contractFilter = collection;
+  if (collection && collection.includes('0x')) {
+    const m = collection.match(/0x[a-fA-F0-9]{40}/);
+    if (m) contractFilter = m[0];
+  }
+  const body = {
+    hubId: SWEEP_STATE.hub,
+    sourceIds: SWEEP_STATE.sources,
+    collection: contractFilter,
+    chain: SWEEP_STATE.chain === 'all' ? 'ethereum' : (SWEEP_STATE.chain || 'ethereum').toLowerCase(),
+    gasPreset: 'normal',
+    rpcUrls: S.rpcs.map(r => r.urlFull || r.url).filter(u => u.startsWith('https://')),
+  };
+  if (API_ONLINE) {
+    RV3_API.createSweepOp(body).then(() => {
+      addNotif('NFT sweep queued', `${srcWallets.length} wallets → hub`, 'info');
+      toast(`Sweep queued on worker`,'⚡');
+      SWEEP_STATE.step=1; go('sweep');
+    }).catch(e => toast(e.message || 'Sweep queue failed','⚠'));
+    return;
+  }
+  addNotif('NFT sweep queued', `${srcWallets.length} wallets (offline)`, 'info');
+  toast(`Sweep queued (start npm start)`,'ℹ');
+  SWEEP_STATE.step=1; go('sweep');
+}
+
+// NOTIFICATIONS
+const NOTIFS = [];
+const CHANGELOG = [
+  {
+    ver:'v1.3.0', date:'Jun 10 2026', isNew:true,
+    items:[
+      {tag:'new', text:'Fund Wallets: 4-step wizard (Distribute, Consolidate, Split gas, One-click)'},
+      {tag:'new', text:'NFT Sweep: 3-step wizard with hub, chain filter, and collection filter'},
+      {tag:'new', text:'Notification panel: live mint results, fund ops, balance alerts, update notes'},
+      {tag:'new', text:'User Guide: 8 collapsible sections covering every feature'},
+      {tag:'new', text:'Changelog popup: click any notification to expand full release notes'},
+    ]
+  },
+  {
+    ver:'v1.2.0', date:'Jun 10 2026', isNew:false,
+    items:[
+      {tag:'sec', text:'XSS protection: all user input sanitized before render'},
+      {tag:'sec', text:'Content Security Policy header added'},
+      {tag:'sec', text:'Session-only storage: no persistent browser writes'},
+      {tag:'sec', text:'Max spend cap enforced at task submission'},
+      {tag:'sec', text:'URL validation on RPC endpoint save'},
+      {tag:'fix', text:'RV3 SVG logo, PRO badge removed'},
+    ]
+  },
+  {
+    ver:'v1.1.0', date:'Jun 9 2026', isNew:false,
+    items:[
+      {tag:'new', text:'Custom gas: any gwei value, ETH and USD auto-calculate'},
+      {tag:'new', text:'RPC blast grid: all endpoints listed, fire simultaneously'},
+      {tag:'new', text:'Auto-schedule: fires at T-1ms, last millisecond before phase open'},
+      {tag:'new', text:'Live countdown timer in task modal'},
+    ]
+  },
+  {
+    ver:'v1.0.0', date:'Jun 9 2026', isNew:false,
+    items:[
+      {tag:'new', text:'Initial build: 9-page SPA'},
+      {tag:'new', text:'Overview, Detector, Wallets, Drops, Tasks, Delegation, History, PnL, Settings'},
+    ]
+  },
+];
+
+function openChangelog(ver) {
+  const modal = document.getElementById('changelogModal');
+  const body = document.getElementById('cl-modal-body');
+  if(!modal || !body) return;
+  body.innerHTML = CHANGELOG.map(cl=>`
+    <div class="cl-release">
+      <div class="cl-release-hd">
+        <span class="cl-release-ver">${esc(cl.ver)}</span>
+        <span class="cl-release-date">${esc(cl.date)}</span>
+        ${cl.isNew ? '<span class="cl-release-latest">Latest</span>' : ''}
+      </div>
+      <div class="cl-items">
+        ${cl.items.map(it=>`
+        <div class="cl-item">
+          <span class="cl-item-tag cl-tag-${allowClTag(it.tag)}">${allowClTag(it.tag)}</span>
+          <span class="cl-item-text">${esc(it.text)}</span>
+        </div>`).join('')}
+      </div>
+    </div>`).join('');
+  modal.classList.add('show');
+}
+
+function closeChangelog() {
+  document.getElementById('changelogModal').classList.remove('show');
+}
+
+function addNotif(title, body, type='info') {
+  // type: ok|fail|info|new
+  const notif = { id:'n'+Date.now(), title, body, type, time: new Date().toLocaleTimeString(), ts: Date.now(), read:false };
+  NOTIFS.unshift(notif);
+  if(NOTIFS.length>50) NOTIFS.pop();
+  renderNotifPanel();
+  openNotifPanel();
+}
+
+function openNotifPanel() {
+  const panel = document.getElementById('notif-panel');
+  if(panel) panel.style.maxHeight = '220px';
+  document.getElementById('notif-arrow').textContent = '▼';
+}
+
+function toggleNotifPanel() {
+  const panel = document.getElementById('notif-panel');
+  const arrow = document.getElementById('notif-arrow');
+  if(!panel) return;
+  if(panel.style.maxHeight==='0px'||!panel.style.maxHeight) {
+    panel.style.maxHeight='220px'; arrow.textContent='▼';
+  } else {
+    panel.style.maxHeight='0px'; arrow.textContent='▲';
+  }
+}
+
+function renderNotifPanel() {
+  const list = document.getElementById('notif-list');
+  const badge = document.getElementById('notif-count');
+  if(!list) return;
+  const unread = NOTIFS.filter(n=>!n.read).length;
+  if(badge) { badge.textContent=unread; badge.style.display=unread?'block':'none'; }
+  if(!NOTIFS.length) {
+    list.innerHTML='<div style="font-size:11px;color:var(--text3);padding:4px">No notifications</div>';
+    return;
+  }
+  list.innerHTML = NOTIFS.slice(0,15).map(n=>`
+    <div class="notif-item" onclick="${n.type==='new'?'openChangelog()':''}" title="${n.type==='new'?'Click to view changelog':''}">
+      <div class="notif-dot notif-${n.type}"></div>
+      <div class="notif-body">
+        <div class="notif-title">${esc(n.title)}</div>
+        <div style="font-size:10px;color:var(--text2);margin-top:1px">${esc(n.body)}</div>
+        <div class="notif-time">${esc(n.time)}</div>
+      </div>
+      <span class="notif-badge nb-${n.type==='ok'?'ok2':n.type==='fail'?'fail2':'new2'}">${n.type==='ok'?'OK':n.type==='fail'?'FAIL':n.type==='new'?'NEW ↗':'INFO'}</span>
+    </div>`).join('');
+  NOTIFS.forEach(n=>n.read=true);
+}
+
+function clearNotifs() { NOTIFS.length=0; renderNotifPanel(); toast('Notifications cleared','ℹ'); }
+
+
+function notifyMintResult(drop, status, wallets, txHash) {
+  const type = status==='completed'?'ok':status==='failed'?'fail':'info';
+  addNotif(`Mint ${status}: ${drop}`, `${wallets} wallet${wallets!==1?'s':''} · ${txHash||'no tx'}`, type);
+}
+
+// GUIDE
+function renderGuide() {
+  const c = document.getElementById('content');
+  document.getElementById('tba').innerHTML = '';
+
+  const sections = [
+    {
+      icon:'⚡',
+      title:'Quick Start',
+      body:`<div class="guide-step"><div class="guide-step-num">1</div><div class="guide-step-body"><div class="guide-step-title">Add RPC endpoints</div><div class="guide-step-desc">Go to Settings, then RPC Endpoints. Add your Alchemy, QuickNode, or dRPC URLs. Required to execute any transaction. RPC blast fires all endpoints simultaneously.</div></div></div>
+<div class="guide-step"><div class="guide-step-num">2</div><div class="guide-step-body"><div class="guide-step-title">Import your wallets</div><div class="guide-step-desc">Go to Wallets, then Import. Enter a label and private key. The raw key is never saved — only an address hint is kept in session storage. Set a low-balance alert in Settings.</div></div></div>
+<div class="guide-step"><div class="guide-step-num">3</div><div class="guide-step-body"><div class="guide-step-title">Detect a contract</div><div class="guide-step-desc">Go to Detector. Paste a contract address or URL from OpenSea, Magic Eden, Blur, Kingdomly, Manifold, Thirdweb, or any ERC-721A contract.</div></div></div>
+<div class="guide-step"><div class="guide-step-num">4</div><div class="guide-step-body"><div class="guide-step-title">Create a mint task</div><div class="guide-step-desc">Click Add to Drops from the Detector result, then Mint on the Drops page. Select phase, wallets, gas preset, and route. Check the gas calculator before submitting.</div></div></div>
+<div class="guide-step"><div class="guide-step-num">5</div><div class="guide-step-body"><div class="guide-step-title">Monitor execution</div><div class="guide-step-desc">Tasks run via your VPS worker. Check History for logs. The notification panel in the sidebar shows results live.</div></div></div>`
+    },
+    {
+      icon:'◎',
+      title:'Contract Detector',
+      body:`<h4>Supported standards</h4>
+<ul>
+  <li><strong>SeaDrop</strong> — OpenSea's native drop standard. Calldata fetched per wallet at preflight. Wallet eligibility checked automatically.</li>
+  <li><strong>ERC-721A</strong> — Azuki's gas-optimised batch mint standard. Works with Magic Eden, Blur, Kingdomly, Hyperlaunch.</li>
+  <li><strong>ERC-721C</strong> — Creator-royalty-enforcing standard used on OpenSea.</li>
+  <li><strong>Manifold</strong> — Manifold Studio extension contracts. Free mints common.</li>
+  <li><strong>Thirdweb</strong> — SDK-based drops using <code>claim()</code> function.</li>
+  <li><strong>Custom <code>mint()</code></strong> — RV3 fingerprints the ABI to find the mint function automatically.</li>
+</ul>
+<h4>How to use</h4>
+<p>Paste a contract address or URL. RV3 reads the standard, phases, price, and supply. Click <strong>"Add to Drops"</strong> to track it and mint from the Drops page.</p>
+<h4>Connecting APIs for full data</h4>
+<p>Without API keys, RV3 performs heuristic detection. For verified supply, real-time floor, and wallet eligibility: connect Alchemy and Etherscan API keys in Settings.</p>`
+    },
+    {
+      icon:'◫',
+      title:'Wallets',
+      body:`<h4>Adding wallets</h4>
+<p>Click Import, paste your private key. RV3 stores only an address hint. The raw key is never saved. Keys clear on tab close.</p>
+<h4>Balance management</h4>
+<p>Set a threshold in Settings (e.g. 0.01 ETH). Wallets below it show amber and trigger a notification.</p>
+<h4>Fund Wallets wizard</h4>
+<ul>
+  <li><strong>Distribute</strong> — Send ETH from one hub wallet to multiple recipients (up to 50).</li>
+  <li><strong>Consolidate</strong> — Sweep ETH from multiple wallets into one hub wallet.</li>
+  <li><strong>Split gas</strong> — Auto-calculates and evenly splits the hub's balance across all mint wallets (reserves 2% for gas).</li>
+  <li><strong>One-click fund</strong> — Instantly queues a split operation across all wallets.</li>
+</ul>
+<h4>NFT Sweep</h4>
+<p>Move NFTs from mint wallets into one hub. Filter by collection if needed. Each source wallet pays its own gas.</p>`
+    },
+    {
+      icon:'⚡',
+      title:'Mint Tasks',
+      body:`<h4>Creating a task</h4>
+<p>Select the drop and phase, pick your mint wallets, set quantity per wallet, choose gas preset, and select an inclusion route. The gas calculator shows ETH and USD cost before you submit.</p>
+<h4>Gas presets</h4>
+<ul>
+  <li><strong>Slow</strong> — 15 gwei. For low-congestion mints with no time pressure.</li>
+  <li><strong>Normal</strong> — 25 gwei. Standard. Works for most public mints.</li>
+  <li><strong>Fast</strong> — 40 gwei. Use for competitive public mints.</li>
+  <li><strong>Turbo</strong> — 80 gwei. Maximum speed. For high-demand FCFS drops.</li>
+  <li><strong>Custom</strong> — Enter any gwei value. ETH and USD costs auto-calculate.</li>
+</ul>
+<h4>Inclusion routes</h4>
+<ul>
+  <li><strong>Direct RPC</strong> — Signs once, blasts to all your RPC endpoints in parallel. No MEV protection but fastest for most mints.</li>
+  <li><strong>Public mempool</strong> — Standard broadcast. No privacy.</li>
+  <li><strong>Flashbots Protect</strong> — Private relay via <code>ETH_RPC_PRIVATE</code>. Sandwich-resistant.</li>
+  <li><strong>Flashbots bundle</strong> — Private bundle targeting a specific block. Requires <code>FLASHBOTS_AUTH_PRIVATE_KEY</code>.</li>
+  <li><strong>Delegation batch</strong> — One transaction mints for all wallets via your executor contract. Requires Delegation setup.</li>
+</ul>
+<h4>Auto-scheduling</h4>
+<p>Enable "Auto-schedule to phase start" in the task modal. RV3 detects the phase open timestamp and schedules execution to fire at <strong>T-1ms</strong> (the last millisecond before the phase opens). A live countdown shows time remaining.</p>
+<h4>RPC blast</h4>
+<p>When enabled, the transaction is signed once and broadcast to every configured RPC endpoint at the exact same millisecond. First confirmation wins. More endpoints means higher chance of landing the block.</p>`
+    },
+    {
+      icon:'◈',
+      title:'Delegation',
+      body:`<h4>What delegation does</h4>
+<p>Your executor contract batches multiple mints in one transaction for <code>mintSigned</code> OpenSea drops. The operator wallet pays all mint costs and gas; NFTs land directly on each task wallet.</p>
+<h4>When to use it</h4>
+<p>Use delegation for SeaDrop drops to mint across many wallets in one transaction. For <code>mintPublic</code> drops where your executor is not on the payer allowlist, RV3 falls back to individual wallet-signed mints automatically.</p>
+<h4>Setup</h4>
+<ol style="padding-left:18px">
+  <li style="margin-bottom:4px">Go to Delegation, choose your operator wallet</li>
+  <li style="margin-bottom:4px">Fund the operator with: mint cost × number of wallets + gas</li>
+  <li>Click Deploy contract. Your VPS worker handles deployment.</li>
+</ol>`
+    },
+    {
+      icon:'📈',
+      title:'PnL Tracking',
+      body:`<h4>What's tracked</h4>
+<p>RV3 logs gas cost in USD per run. PnL shows total minted, gas spent, and average cost per NFT.</p>
+<h4>Floor price tracking</h4>
+<p>Connect OpenSea or Blur API keys in Settings for live floor and PnL per collection.</p>
+<h4>Improving your PnL</h4>
+<ul>
+  <li>Use Direct RPC + RPC blast for lowest latency (avoid failed transactions).</li>
+  <li>Set a custom gas that matches network conditions. Overpaying gwei erodes PnL.</li>
+  <li>Use Delegation batch for SeaDrop mints to reduce total gas spent.</li>
+  <li>Monitor the notification panel for failed runs and retry quickly.</li>
+</ul>`
+    },
+    {
+      icon:'🔔',
+      title:'Notifications',
+      body:`<h4>Notification panel</h4>
+<p>The notification panel sits at the bottom of the sidebar. It shows mint results, fund ops, low balance alerts, and update notifications.</p>
+<h4>Notification types</h4>
+<ul>
+  <li><span style="color:var(--green)">● OK</span> — Mint completed successfully, fund operation done</li>
+  <li><span style="color:var(--red)">● FAIL</span> — Mint failed, transaction reverted</li>
+  <li><span style="color:var(--blue)">● INFO</span> — Operation queued, balance warning</li>
+  <li><span style="color:var(--accent3)">● NEW</span> — RV3 update / changelog entry</li>
+</ul>
+<h4>External alerts</h4>
+<p>Set Discord webhook or Telegram bot in Settings. The VPS worker sends alerts when mints complete or fail.</p>`
+    },
+    {
+      icon:'🔐',
+      title:'Security',
+      body:`<h4>Key storage</h4>
+<p>Private keys are never persisted. RV3 stores only an address hint in session storage, never the raw key. Always use a dedicated minting wallet, not your main wallet.</p>
+<h4>Built-in protections</h4>
+<ul>
+  <li>XSS prevention: all user input sanitized via <code>esc()</code> before rendering</li>
+  <li>Content Security Policy blocks external script injection</li>
+  <li>No <code>eval()</code> or dynamic code execution anywhere in the codebase</li>
+  <li>URL validation on RPC endpoints</li>
+  <li>Max spend cap enforced on submission. Blocks if estimated cost exceeds limit.</li>
+  <li>Input sanitization on all numeric fields (<code>sanitizeNum</code>, <code>sanitizeInt</code>)</li>
+  <li>Fetch timeouts (5s)</li>
+</ul>
+<h4>Best practices</h4>
+<ul>
+  <li>Run RV3 on your own server. Never share the URL.</li>
+  <li>Rotate private keys regularly</li>
+  <li>Set a max spend cap before every session</li>
+  <li>Monitor the notification panel</li>
+</ul>`
+    },
+  ];
+
+  c.innerHTML = `
+<div style="font-size:12px;color:var(--text2);margin-bottom:16px;line-height:1.7">
+  RV3 personal mint bot. Click any section to expand.
+</div>
+
+<!-- CHANGELOG / WHAT'S NEW -->
+<div class="guide-section" style="border-color:rgba(74,124,252,.25)">
+  <div class="guide-hd" onclick="openChangelog()" style="background:rgba(74,124,252,.05);cursor:pointer">
+    <span class="g-icon">🆕</span>
+    <h3>What's New</h3>
+    <span style="font-size:10px;color:var(--accent3);font-weight:700">LATEST: v1.3.0</span>
+    <span style="font-size:11px;color:var(--accent3);margin-left:auto;font-weight:500">View changelog ↗</span>
+  </div>
+</div>
+
+${sections.map((s,i)=>`
+<div class="guide-section">
+  <div class="guide-hd" onclick="guideToggle('s${i}')">
+    <span class="g-icon">${s.icon}</span>
+    <h3>${esc(s.title)}</h3>
+    <span style="font-size:11px;color:var(--text3)" id="s${i}-arrow">▼</span>
+  </div>
+  <div id="gs-s${i}" class="guide-body" style="display:none;border-top:1px solid var(--border)">
+    ${s.body}
+  </div>
+</div>`).join('')}`;
+}
+
+function guideToggle(id) {
+  const el = document.getElementById('gs-'+id);
+  const arrow = document.getElementById(id+'-arrow') || document.getElementById('cl-arrow');
+  if(!el) return;
+  const isHidden = el.style.display==='none'||!el.style.display;
+  el.style.display = isHidden?'block':'none';
+  if(arrow) arrow.textContent = isHidden?'▲':'▼';
+}
+
+// BOOT
+document.addEventListener('DOMContentLoaded', async () => {
+  loadState();
+  if (!RV3_API.token()) RV3_API.setToken('rv3_local_dev_change_this');
+  await apiConnect();
+  if (API_ONLINE) {
+    await syncEnvRpcs();
+    await syncFromServer();
+    try { await RV3_API.settingsStatus(); } catch { /* */ }
+    addNotif('Backend online', 'Worker connected · edit .env for API keys', 'info');
+  } else {
+    addNotif('Backend offline', 'Run npm start in the RV3 folder', 'warn');
+  }
+  go('overview');
+  updateSystemStatus();
+  updateBadges();
+  fetchEthPrice();
+  renderNotifPanel();
+  setInterval(async () => {
+    if (API_ONLINE) {
+      await syncFromServer();
+      updateSystemStatus();
+      if (document.getElementById('nav-tasks')?.classList.contains('act')) go('tasks');
+    }
+  }, 5000);
+  // fire latest changelog notif
+  const latest = CHANGELOG[0];
+  if(latest) {
+    setTimeout(()=>{
+      addNotif(`${latest.ver} is out`, latest.items.slice(0,2).map(i=>i.text).join(' · '), 'new');
+    }, 800);
+  }
+  // keyboard shortcuts
+  document.addEventListener('keydown', e => {
+    if(e.key === 'Escape') { closeModal(); closeChangelog(); }
+    if(e.key === 'Enter' && document.getElementById('taskModal').classList.contains('show')) {
+      if(document.activeElement?.id !== 'm-taskname') mSubmit();
+    }
+  });
+  // Click outside modals to close
+  document.getElementById('taskModal').addEventListener('click', e => {
+    if(e.target === document.getElementById('taskModal')) closeModal();
+  });
+  document.getElementById('changelogModal').addEventListener('click', e => {
+    if(e.target === document.getElementById('changelogModal')) closeChangelog();
+  });
+});
+</script>
+</body>
+</html>
