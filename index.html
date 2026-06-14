@@ -717,24 +717,29 @@ async function syncFromServer() {
   } catch { /* */ }
 }
 function apiStatusRows() {
-  const svc = RV3_API.services;
-  if (!svc) return '<div style="font-size:12px;color:var(--text3)">Backend offline — run <code>npm start</code></div>';
-  const rows = (svc.opensea && typeof svc.opensea === 'object')
-    ? Object.values(svc).filter(s => s && typeof s === 'object')
-    : [
-        { configured: svc.opensea, label: 'OpenSea API' },
-        { configured: svc.etherscan, label: 'Etherscan API' },
-        { configured: svc.rpc > 0, label: `RPC endpoints (${svc.rpc || 0})` },
-        { configured: svc.walletEncryption, label: 'Wallet encryption' },
-        { configured: svc.liveMint, label: 'Live mint enabled' },
-        { configured: svc.discord, label: 'Discord alerts' },
-        { configured: svc.telegram, label: 'Telegram alerts' },
-      ];
-  return rows.map(s => `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;font-size:12px;border-bottom:1px solid var(--border)">
-      <span style="color:var(--text2)">${esc(s.label || '')}</span>
-      <span class="st ${s.configured || s.enabled ? 'st-ok' : 'st-pend'}" style="font-size:9px">${s.configured || s.enabled ? 'OK' : 'NOT SET'}</span>
-    </div>`).join('');
+  try {
+    const svc = RV3_API.services;
+    if (!svc || typeof svc !== 'object') return '<div style="font-size:12px;color:var(--text3)">Backend offline — run <code>npm start</code></div>';
+    const rows = (svc.opensea && typeof svc.opensea === 'object')
+      ? Object.values(svc).filter(s => s && typeof s === 'object' && ('configured' in s || 'enabled' in s))
+      : [
+          { configured: svc.opensea, label: 'OpenSea API' },
+          { configured: svc.etherscan, label: 'Etherscan API' },
+          { configured: svc.rpc > 0, label: `RPC endpoints (${svc.rpc || 0})` },
+          { configured: svc.walletEncryption, label: 'Wallet encryption' },
+          { configured: svc.liveMint, label: 'Live mint enabled' },
+          { configured: svc.discord, label: 'Discord alerts' },
+          { configured: svc.telegram, label: 'Telegram alerts' },
+        ];
+    return rows.map(s => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;font-size:12px;border-bottom:1px solid var(--border)">
+        <span style="color:var(--text2)">${esc(s.label || '')}</span>
+        <span class="st ${s.configured || s.enabled ? 'st-ok' : 'st-pend'}" style="font-size:9px">${s.configured || s.enabled ? 'OK' : 'NOT SET'}</span>
+      </div>`).join('');
+  } catch(e) {
+    console.warn('apiStatusRows error:', e);
+    return '<div style="font-size:12px;color:var(--text3)">Status unavailable</div>';
+  }
 }
 
 // STATE
@@ -855,7 +860,14 @@ function go(page) {
   document.getElementById('pg-title').textContent = titles[page] || page;
   document.getElementById('tba').innerHTML = '';
   document.getElementById('content').innerHTML = '';
-  if(renders[page]) renders[page]();
+  if(renders[page]) {
+    try {
+      renders[page]();
+    } catch(err) {
+      console.error('RV3 render error on page "' + page + '":', err);
+      document.getElementById('content').innerHTML = '<div class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt">Render error: ' + esc(String(err)) + '</div></div>';
+    }
+  }
   updateBadges();
 }
 
@@ -1972,8 +1984,8 @@ async function updateSystemStatus() {
   if(!workerEl || !workerLbl) return;
   try {
     if (!API_ONLINE) await apiConnect();
-    if (API_ONLINE && RV3_API.health) {
-      const h = RV3_API.health;
+    if (API_ONLINE && RV3_API.healthData) {
+      const h = RV3_API.healthData;
       const q = h.queuedTasks || 0;
       workerEl.className = 'dot ' + (q ? 'da' : 'dg');
       workerLbl.textContent = q ? `Worker: ${q} queued` : 'Worker: online';
@@ -2724,9 +2736,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const act = document.querySelector('.ni.act');
     if (act) {
       const page = act.id.replace('nav-', '');
-      if (['overview', 'settings', 'wallets'].includes(page)) {
-        go(page);
-      }
+      go(page);
     }
   }).catch(() => {
     addNotif('Backend offline', 'Run npm start in the RV3 folder', 'warn');

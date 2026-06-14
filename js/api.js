@@ -1,7 +1,7 @@
 // RV3 API client — talks to local Express backend (same origin when using npm start)
 const RV3_API = {
   online: false,
-  health: null,
+  healthData: null,
   services: null,
 
   token() {
@@ -24,7 +24,7 @@ const RV3_API = {
   async health() {
     const data = await this.request('/health');
     this.online = true;
-    this.health = data;
+    this.healthData = data;
     this.services = data.services;
     return data;
   },
