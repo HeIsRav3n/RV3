@@ -46,8 +46,12 @@ const RV3_Auth = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
+    if (!res.ok) {
+      const text = await res.text();
+      console.error('Register error response:', text.slice(0, 200));
+      throw new Error('Server error — restart npm start and try again');
+    }
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Registration failed');
     this.setToken(data.token);
     this.setUser(data.user);
     return data;

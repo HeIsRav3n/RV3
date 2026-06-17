@@ -40,12 +40,15 @@ router.post('/login', (req, res) => {
 router.post('/register', (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = authService.register(email, password);
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password required' });
+    }
+    authService.register(email, password);
     // Auto-login after registration
     const result = authService.login(email, password);
     res.json(result);
   } catch (e) {
-    res.status(400).json({ error: e.message });
+    res.status(400).json({ error: e.message || 'Registration failed' });
   }
 });
 
