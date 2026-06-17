@@ -1,9 +1,4 @@
 // RV3 Auth Client
-// Prevent ethereum injection conflicts
-if (typeof window.ethereum !== 'undefined') {
-  try { delete window.ethereum; } catch (e) { /* read-only */ }
-}
-
 const RV3_Auth = {
   token: null,
   user: null,
