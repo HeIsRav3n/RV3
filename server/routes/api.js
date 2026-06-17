@@ -13,6 +13,7 @@ const worker = require('../services/worker');
 const pnl = require('../services/pnl');
 const tx = require('../services/tx');
 const { encrypt, addressFromKey } = require('../services/crypto');
+const walletStore = require('../services/wallets');
 
 const router = express.Router();
 
@@ -169,22 +170,40 @@ router.post('/rpc/ping', async (req, res) => {
   }
 });
 
-router.get('/wallets', (req, res) => {
-  const s = state();
-  res.json({
-    wallets: s.wallets.map(w => ({
-      id: w.id, name: w.name, addr: w.address || w.addr, address: w.address,
-      eth: w.eth || 0, chain: w.chain || 'ETH', low: !!w.low,
-      hasKey: !!w.encryptedKey,
-    })),
-  });
+router.get('/wallets', async (req, res) => {
+  try {
+    const wallets = await walletStore.loadWallets();
+    // keep in-memory state in sync
+    state().wallets = wallets;
+    res.json({
+      wallets: wallets.map(w => ({
+        id: w.id, name: w.name, addr: w.addr, address: w.address,
+        eth: w.eth || 0, chain: w.chain || 'ETH', low: !!w.low,
+        hasKey: !!w.encryptedKey,
+      })),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.post('/wallets/refresh', async (req, res) => {
   try {
-    await worker.refreshWalletBalances();
-    worker.save();
-    res.json({ wallets: state().wallets.map(w => ({ id: w.id, eth: w.eth, low: w.low })) });
+    const wallets = await walletStore.loadWallets();
+    state().wallets = wallets;
+    const urls = rpc.allRpcUrls();
+    if (urls.length) {
+      await Promise.allSettled(wallets.map(async w => {
+        if (!w.address) return;
+        try {
+          const eth = await rpc.getBalance(urls[0], w.address);
+          w.eth = eth;
+          w.low = eth < 0.01;
+          await walletStore.updateBalance(w.id, eth);
+        } catch { /* keep last */ }
+      }));
+    }
+    res.json({ wallets: wallets.map(w => ({ id: w.id, eth: w.eth, low: w.low })) });
   } catch (e) {
     res.status(502).json({ error: e.message });
   }
@@ -208,7 +227,7 @@ router.post('/wallets/preview', async (req, res) => {
   }
 });
 
-router.post('/wallets/import', (req, res) => {
+router.post('/wallets/import', async (req, res) => {
   try {
     const name = String(req.body?.name || '').trim().slice(0, 80);
     let key = String(req.body?.privateKey || '').trim();
@@ -218,8 +237,12 @@ router.post('/wallets/import', (req, res) => {
     if (!key.startsWith('0x')) key = `0x${key}`;
     const address = addressFromKey(key);
     if (!address) return res.status(400).json({ error: 'Invalid private key' });
+    if (!config.hasWalletEncryption) {
+      return res.status(400).json({
+        error: 'Set WALLET_ENCRYPTION_KEY in .env (64-char hex) before importing keys server-side',
+      });
+    }
 
-    const s = state();
     const entry = {
       id: `w_${Date.now()}`,
       name,
@@ -229,29 +252,44 @@ router.post('/wallets/import', (req, res) => {
       chain: 'ETH',
       low: bal < 0.01,
       nonce: 0,
+      encryptedKey: encrypt(key),
       createdAt: new Date().toISOString(),
     };
 
-    if (!config.hasWalletEncryption) {
-      return res.status(400).json({
-        error: 'Set WALLET_ENCRYPTION_KEY in .env (64-char hex) before importing keys server-side',
-      });
-    }
-    entry.encryptedKey = encrypt(key);
+    await walletStore.saveWallet(entry);
+    // keep in-memory state in sync
+    const s = state();
+    const existing = s.wallets.find(w => w.id === entry.id);
+    if (!existing) s.wallets.push(entry);
 
-    s.wallets.push(entry);
-    worker.save();
     res.json({ wallet: { id: entry.id, name: entry.name, addr: entry.addr, address: entry.address, eth: entry.eth } });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-router.delete('/wallets/:id', (req, res) => {
-  const s = state();
-  s.wallets = s.wallets.filter(w => w.id !== req.params.id);
-  worker.save();
-  res.json({ ok: true });
+router.delete('/wallets/:id', async (req, res) => {
+  try {
+    await walletStore.deleteWallet(req.params.id);
+    const s = state();
+    s.wallets = s.wallets.filter(w => w.id !== req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/wallets/batch-delete', async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(id => typeof id === 'string') : [];
+    if (!ids.length) return res.status(400).json({ error: 'ids required' });
+    await Promise.all(ids.map(id => walletStore.deleteWallet(id)));
+    const s = state();
+    s.wallets = s.wallets.filter(w => !ids.includes(w.id));
+    res.json({ ok: true, deleted: ids.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.get('/tasks', (req, res) => {

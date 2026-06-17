@@ -97,6 +97,10 @@ const RV3_API = {
     return this.request(`/wallets/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
 
+  async batchDeleteWallets(ids) {
+    return this.request('/wallets/batch-delete', { method: 'POST', body: JSON.stringify({ ids }) });
+  },
+
   async listTasks() {
     return this.request('/tasks');
   },

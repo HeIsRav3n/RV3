@@ -10,6 +10,7 @@ const fund = require('./fund');
 const sweep = require('./sweep');
 const tx = require('./tx');
 const prices = require('./prices');
+const walletStore = require('./wallets');
 
 let running = false;
 let state = store.load();
@@ -22,13 +23,14 @@ async function refreshWalletBalances() {
   const urls = rpc.allRpcUrls();
   if (!urls.length) return;
   const url = urls[0];
-  for (const w of state.wallets) {
-    if (!w.address) continue;
+  await Promise.allSettled(state.wallets.map(async w => {
+    if (!w.address) return;
     try {
       w.eth = await rpc.getBalance(url, w.address);
       w.low = w.eth < 0.01;
+      await walletStore.updateBalance(w.id, w.eth);
     } catch { /* keep last */ }
-  }
+  }));
 }
 
 function parseScheduleTime(task) {
@@ -222,9 +224,16 @@ async function runNow(taskId) {
   await tick(taskId);
 }
 
-function start() {
+async function start() {
+  // Load persisted wallets from Neon/file on startup
+  try {
+    const persisted = await walletStore.loadWallets();
+    if (persisted.length) state.wallets = persisted;
+  } catch (e) {
+    store.appendLog(state, 'err', `walletStore.loadWallets: ${e.message}`);
+  }
   setInterval(tick, 500);
-  setInterval(() => { refreshWalletBalances().then(save).catch(() => {}); }, 45000);
+  setInterval(() => { refreshWalletBalances().catch(() => {}); }, 60000);
   store.appendLog(state, 'info', 'RV3 worker started (mint · fund · sweep)');
   save();
 }

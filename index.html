@@ -781,15 +781,13 @@ async function syncFromServer() {
     ]);
     if (tasks?.length) S.tasks = tasks;
     if (historyData?.history?.length) S.history = historyData.history;
-    for (const w of walletsData?.wallets || []) {
-      const existing = S.wallets.find(x => x.id === w.id);
-      if (existing) {
-        existing.eth = w.eth ?? existing.eth;
-        existing.low = w.low ?? existing.low;
-        existing.serverKey = !!w.hasKey;
-      } else {
-        S.wallets.push({ id: w.id, name: w.name, addr: w.addr || w.address, address: w.address || w.addr, eth: w.eth || 0, chain: w.chain || 'ETH', low: !!w.low, serverKey: !!w.hasKey });
-      }
+    // Server is authoritative for wallets — always replace
+    if (walletsData?.wallets) {
+      S.wallets = walletsData.wallets.map(w => ({
+        id: w.id, name: w.name, addr: w.addr || w.address, address: w.address || w.addr,
+        eth: w.eth || 0, chain: w.chain || 'ETH', low: !!w.low,
+        nonce: 0, serverKey: !!w.hasKey,
+      }));
     }
     saveState();
     updateBadges();
@@ -855,7 +853,7 @@ const GAS_PRESETS = { slow: 3, normal: 7, fast: 15, turbo: 25 };
 // PERSISTENCE: session-scoped, clears on close
 function saveState() {
   try {
-    sessionStorage.setItem('rv3_state', JSON.stringify({
+    localStorage.setItem('rv3_state', JSON.stringify({
       wallets: S.wallets, drops: S.drops, tasks: S.tasks, history: S.history,
     }));
   } catch(e) { /* quota or private mode */ }
@@ -892,7 +890,7 @@ function loadState() {
     }
   } catch {}
   try {
-    const raw = sessionStorage.getItem('rv3_state');
+    const raw = localStorage.getItem('rv3_state');
     if(!raw || raw.length > 500000) return;
     const d = JSON.parse(raw);
     if(Array.isArray(d.wallets)) S.wallets = d.wallets.slice(0, 200).filter(w => w && typeof w.id === 'string').map(w => ({
@@ -928,7 +926,7 @@ function loadState() {
     }));
     if(Array.isArray(d.history)) S.history = d.history.slice(0, 500);
     // rpcs and settings now come from localStorage (loaded above), not sessionStorage
-  } catch(e) { sessionStorage.removeItem('rv3_state'); }
+  } catch(e) { localStorage.removeItem('rv3_state'); }
 }
 
 // ROUTER
@@ -1234,6 +1232,16 @@ function renderWallets() {
 </div>
 ${S.wallets.filter(w=>w.eth<lowBal).length ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt">${S.wallets.filter(w=>w.eth<lowBal).length} wallet(s) below ${lowBal} ETH threshold.</div></div>` : ''}
 ${S.wallets.length ? `
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+  <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;user-select:none">
+    <input type="checkbox" id="wallet-select-all" onchange="walletToggleAll(this.checked)" style="width:14px;height:14px;accent-color:var(--accent3);cursor:pointer">
+    Select all
+  </label>
+  <div id="wallet-batch-bar" style="display:none;align-items:center;gap:8px">
+    <span id="wallet-sel-count" style="font-size:12px;color:var(--text2)">0 selected</span>
+    <button class="btn btn-xs" style="background:rgba(240,64,64,.15);color:var(--red);border:1px solid rgba(240,64,64,.3)" onclick="walletBatchDelete()">✕ Delete selected</button>
+  </div>
+</div>
 <div class="wg" id="wallet-grid">
   ${S.wallets.map(w=>walletCardHTML(w, lowBal)).join('')}
 </div>
@@ -1280,16 +1288,17 @@ ${S.wallets.length ? `
 
 function walletCardHTML(w, lowBal) {
   const isLow = w.eth < lowBal;
-  return `<div class="wc${isLow?' low':''}">
-    <div class="wc-addr" title="${esc(w.addr)}">${esc(w.addr)}</div>
+  return `<div class="wc${isLow?' low':''}" id="wcard-${esc(w.id)}">
+    <input type="checkbox" class="wallet-cb" data-id="${esc(w.id)}" onchange="walletCbChange()"
+      style="position:absolute;top:8px;left:8px;width:14px;height:14px;accent-color:var(--accent3);cursor:pointer;z-index:1">
+    <div class="wc-addr" title="${esc(w.address||w.addr)}">${esc(w.addr)}</div>
     <div class="wc-name">${esc(w.name)}</div>
-    <div class="wc-bal">${w.eth.toFixed(4)} ETH</div>
-    <div class="wc-sub">nonce ${w.nonce||0}</div>
+    <div class="wc-bal">${(w.eth||0).toFixed(4)} ETH</div>
+    <div class="wc-sub">${w.address ? w.address.slice(0,10)+'…'+w.address.slice(-8) : ''}</div>
     <div class="wc-actions">
       <span class="ct ${w.chain==='Base'?'ct-base':w.chain==='Blast'?'ct-blast':'ct-eth'}">◆ ${esc(w.chain||'ETH')}</span>
       <div style="display:flex;gap:2px">
-        <span class="wc-act" onclick="copyAddr('${esc(w.addr)}')" title="Copy address">⧉</span>
-        <span class="wc-act" onclick="walletFund('${esc(w.id)}')" title="Fund">⬆</span>
+        <span class="wc-act" onclick="copyAddr('${esc(w.address||w.addr)}')" title="Copy address">⧉</span>
         <span class="wc-act del" onclick="walletDelete('${esc(w.id)}')" title="Remove">✕</span>
       </div>
     </div>
@@ -1301,6 +1310,39 @@ function wTab(tab, el) {
   el.classList.add('act');
   if(tab==='fund') { setTimeout(()=>go('fund'),80); }
   else if(tab==='split') { setTimeout(()=>go('fund'),80); }
+}
+
+function walletToggleAll(checked) {
+  document.querySelectorAll('.wallet-cb').forEach(cb => { cb.checked = checked; });
+  walletCbChange();
+}
+
+function walletCbChange() {
+  const checked = [...document.querySelectorAll('.wallet-cb:checked')];
+  const bar = document.getElementById('wallet-batch-bar');
+  const countEl = document.getElementById('wallet-sel-count');
+  const selectAll = document.getElementById('wallet-select-all');
+  const total = document.querySelectorAll('.wallet-cb').length;
+  if (bar) bar.style.display = checked.length ? 'flex' : 'none';
+  if (countEl) countEl.textContent = `${checked.length} selected`;
+  if (selectAll) selectAll.indeterminate = checked.length > 0 && checked.length < total;
+  if (selectAll && checked.length === total && total > 0) selectAll.checked = true;
+}
+
+async function walletBatchDelete() {
+  const checked = [...document.querySelectorAll('.wallet-cb:checked')];
+  if (!checked.length) return;
+  const ids = checked.map(cb => cb.dataset.id);
+  if (!confirm(`Remove ${ids.length} wallet${ids.length !== 1 ? 's' : ''}? This cannot be undone.`)) return;
+  try {
+    if (API_ONLINE) await RV3_API.batchDeleteWallets(ids);
+    S.wallets = S.wallets.filter(w => !ids.includes(w.id));
+    saveState(); updateBadges();
+    toast(`${ids.length} wallet${ids.length !== 1 ? 's' : ''} removed`, 'ℹ');
+    go('wallets');
+  } catch (e) {
+    toast(e.message || 'Batch delete failed', '⚠');
+  }
 }
 
 let _walletPreviewTimer = null;
@@ -1799,8 +1841,8 @@ async function handleLogout() {
   if (!confirm('Sign out? You will need to sign in again.')) return;
   await RV3_Auth.logout();
   API_ONLINE = false;
-  // Clear session state (keep RPCs/settings in localStorage)
-  sessionStorage.removeItem('rv3_state');
+  // Clear state cache on logout (keep RPCs/settings)
+  localStorage.removeItem('rv3_state');
   S.wallets = []; S.drops = []; S.tasks = []; S.history = [];
   document.getElementById('loginPage').style.display = 'flex';
   document.getElementById('sidebar').style.display = 'none';
