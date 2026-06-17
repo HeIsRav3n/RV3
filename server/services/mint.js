@@ -64,16 +64,18 @@ async function runMintTask(task, wallets, log) {
   const txHashes = [];
   const errors = [];
 
-  for (const w of selected) {
-    try {
-      const r = await executeMintForWallet(w, task, log);
+  const results = await Promise.allSettled(selected.map(w => executeMintForWallet(w, task, log)));
+
+  for (const res of results) {
+    if (res.status === 'fulfilled') {
       minted += task.qty || 1;
-      totalGas += r.gasUsed || 0n;
-      totalConfirmMs += r.confirmMs || 0;
-      txHashes.push(r.hash);
-    } catch (e) {
-      errors.push(`${w.name}: ${e.message}`);
-      log('err', `${w.name}: ${e.message}`);
+      totalGas += res.value.gasUsed || 0n;
+      totalConfirmMs += res.value.confirmMs || 0;
+      txHashes.push(res.value.hash);
+    } else {
+      const msg = res.reason?.message || String(res.reason);
+      errors.push(msg);
+      log('err', msg);
     }
   }
 

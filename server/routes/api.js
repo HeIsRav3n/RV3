@@ -293,6 +293,23 @@ router.post('/tasks', taskLimiter, (req, res) => {
   res.json({ task });
 });
 
+router.post('/tasks/:id/run', async (req, res) => {
+  try {
+    await worker.runNow(req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post('/tasks/:id/priority', (req, res) => {
+  const task = state().tasks.find(t => t.id === req.params.id);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+  task.priority = true;
+  worker.save();
+  res.json({ ok: true });
+});
+
 router.delete('/tasks/:id', (req, res) => {
   const s = state();
   s.tasks = s.tasks.filter(t => t.id !== req.params.id);

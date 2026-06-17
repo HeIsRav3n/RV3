@@ -501,17 +501,13 @@ code{background:var(--bg4);padding:1px 5px;border-radius:4px;font-size:11px;font
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
       <span class="ni-label">Overview</span>
     </div>
-    <div class="ni" id="nav-detector" onclick="go('detector')" role="button" title="Detector">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><circle cx="11" cy="11" r="3"/></svg>
-      <span class="ni-label">Detector</span>
-    </div>
     <div class="ni" id="nav-wallets" onclick="go('wallets')" role="button" title="Wallets">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><circle cx="16" cy="15" r="1" fill="currentColor"/></svg>
       <span class="ni-label">Wallets</span>
       <span class="ni-b nb-g" id="nb-wallets">0</span>
     </div>
     <div class="ni" id="nav-drops" onclick="go('drops')" role="button" title="Drops">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><circle cx="11" cy="11" r="3"/></svg>
       <span class="ni-label">Drops</span>
       <span class="ni-b nb-g" id="nb-drops">0</span>
     </div>
@@ -936,21 +932,22 @@ function loadState() {
 }
 
 // ROUTER
-const PAGES = new Set(['overview','detector','wallets','drops','tasks','deleg','history','pnl','settings','fund','sweep','guide']);
+const PAGES = new Set(['overview','drops','wallets','tasks','deleg','history','pnl','settings','fund','sweep','guide']);
 function go(page) {
+  if(page === 'detector') page = 'drops';
   if(!PAGES.has(page)) return;
   document.querySelectorAll('.ni').forEach(n => { n.classList.remove('act'); n.removeAttribute('aria-current'); });
   const el = document.getElementById('nav-'+page);
   if(el) { el.classList.add('act'); el.setAttribute('aria-current','page'); }
   const renders = {
-    overview: renderOverview, detector: renderDetector,
+    overview: renderOverview,
     wallets: renderWallets, drops: renderDrops, tasks: renderTasks,
     deleg: renderDeleg, history: renderHistory, pnl: renderPnl,
     settings: renderSettings, fund: renderFund, sweep: renderSweep,
     guide: renderGuide
   };
   const titles = {
-    overview:'Overview', detector:'Contract Detector', wallets:'Wallets',
+    overview:'Overview', wallets:'Wallets',
     drops:'Drops', tasks:'Tasks', deleg:'Delegation', history:'Run History',
     pnl:'PnL', settings:'Settings', fund:'Fund Wallets', sweep:'NFT Sweep',
     guide:'User Guide'
@@ -1069,35 +1066,9 @@ const DET_DB = {
   seadrop:{name:'',addr:'0x...',std:'SeaDrop',stdClass:'sd',chain:'Ethereum',price:'',supply:'',totalMinted:'',verified:'✓ Verified',source:'OpenSea API + On-chain ABI',phases:[]},
 };
 
-function renderDetector() {
-  const c = document.getElementById('content');
-  c.innerHTML = `
-<div class="card">
-  <div class="card-hd"><span style="font-size:16px">◎</span><h2>Paste contract address or collection URL</h2><span style="font-size:10.5px;color:var(--text3)">ETH · Base · Blast</span></div>
-  <div class="card-body">
-    <div style="display:flex;gap:8px">
-      <input class="fi" id="det-in" placeholder="0x...  or  opensea.io/collection/...  or  magiceden.io/collections/..."
-             style="flex:1;font-family:var(--mono)" oninput="detOnInput()" onkeydown="if(event.key==='Enter')detRun()">
-      <button class="btn btn-p" onclick="detRun()" id="det-btn">⚡ Detect</button>
-    </div>
-    <div style="font-size:10.5px;color:var(--text3);margin-top:8px">Detects: SeaDrop, ERC-721A, ERC-721C, Manifold, Thirdweb, custom <code>mint()</code> · <code>claim()</code> functions · OpenSea signed drops</div>
-  </div>
-</div>
-
-<div id="det-result" style="display:none"></div>
-
-<div class="section-lbl" style="margin-top:18px">Supported platforms</div>
-<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:7px">
-  ${[['🌊','OpenSea','SeaDrop/ERC-721C'],['◈','Magic Eden','ERC-721A/1155'],['◎','Blur.xyz','ERC-721A'],['♛','Kingdomly','ERC-721A'],['⬡','Hyperlaunch','ERC-721A'],['◉','Manifold','Custom ext.'],['⬡','Thirdweb','SDK-based'],['◷','Zora','ERC-721/1155'],['◫','Foundation','ERC-721'],['◈','SuperRare','ERC-721']].map(([icon,name,type])=>`
-  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:9px 11px;display:flex;align-items:flex-start;gap:7px">
-    <span style="font-size:15px;line-height:1.2;flex-shrink:0">${icon}</span>
-    <div><div style="font-size:12px;font-weight:600">${esc(name)}</div><div style="font-size:9.5px;color:var(--text3);margin-top:1px">${esc(type)}</div></div>
-  </div>`).join('')}
-</div>`;
-}
-
 function detOnInput() {
-  document.getElementById('det-result').style.display = 'none';
+  const r = document.getElementById('det-result');
+  if (r) r.style.display = 'none';
 }
 
 function phaseTypeBadge(type) {
@@ -1206,9 +1177,44 @@ function detAddToDrops() {
     walletElig: r.walletElig || {},
   });
   saveState(); updateBadges();
-  document.getElementById('det-add-btn').textContent = '✓ Added';
-  document.getElementById('det-add-btn').disabled = true;
+  const addBtn = document.getElementById('det-add-btn');
+  if (addBtn) { addBtn.textContent = '✓ Added'; addBtn.disabled = true; }
   toast(`${r.name} added to Drops`, '✓');
+  // Refresh the drops table below without losing the detect result
+  const existing = document.querySelector('.dt');
+  if (existing) { existing.closest('.section-lbl')?.remove(); existing.remove(); }
+  const content = document.getElementById('content');
+  if (content) {
+    const dropsHtml = renderDropsTableHTML();
+    if (dropsHtml) content.insertAdjacentHTML('beforeend', dropsHtml);
+  }
+}
+
+function renderDropsTableHTML() {
+  if (!S.drops.length) return '';
+  return `
+<div class="section-lbl" style="margin-top:20px">Tracked drops</div>
+<div class="dt">
+  <div class="dt-hd">
+    <div class="dth">Collection</div>
+    <div class="dth">Standard</div>
+    <div class="dth">Best phase</div>
+    <div class="dth">Status</div>
+    <div class="dth" style="min-width:120px"></div>
+  </div>
+  ${S.drops.map(d => {
+    const best = d.phases?.find(p=>p.status==='live') || d.phases?.find(p=>p.status==='scheduled') || d.phases?.[0];
+    return `<div class="dt-row">
+      <div class="dtd"><div class="dn">${esc(d.name)}</div><div class="da-addr">${esc(d.addr)}</div><span class="ct ${d.chain==='Base'?'ct-base':d.chain==='Blast'?'ct-blast':'ct-eth'}" style="margin-top:3px;display:inline-flex">◆ ${esc(d.chain||'ETH')}</span></div>
+      <div class="dtd"><span class="tb tb-${allowStdClass(d.stdClass)}">${esc(d.std||'ERC-721A')}</span></div>
+      <div class="dtd" style="font-size:12px">${best?esc(best.label):'—'}</div>
+      <div class="dtd">${(d.phases||[]).map(p=>`<span class="st st-${p.status==='live'?'live':p.status==='scheduled'?'pend':'end'}" style="margin:1px 2px 1px 0;font-size:9.5px">${esc(p.status)}</span>`).join('')||'—'}</div>
+      <div class="dtd" style="display:flex;gap:6px;align-items:center">
+        <button class="btn btn-p btn-xs" onclick="openModal('${esc(d.id)}')">⚡ Mint</button>
+        <button class="btn btn-xs" style="background:rgba(240,64,64,.15);color:var(--red);border:1px solid rgba(240,64,64,.3);padding:3px 9px" onclick="dropDelete('${esc(d.id)}')">✕ Remove</button>
+      </div>
+    </div>`;}).join('')}
+</div>`;
 }
 
 // ── WALLETS ──
@@ -1416,16 +1422,23 @@ async function walletDelete(id) {
 function walletFund(id) { toast('Send ETH to the wallet address directly','ℹ'); }
 function copyAddr(addr) { navigator.clipboard?.writeText(addr).then(()=>toast('Address copied','✓')); }
 
-// ── DROPS ──
+// ── DROPS (Detector + tracked drops combined) ──
 function renderDrops() {
   const c = document.getElementById('content');
-  document.getElementById('tba').innerHTML = `
-    <button class="btn btn-sm btn-r" onclick="dropsClearAll()">Clear all</button>
-    <button class="btn btn-p btn-sm" onclick="go('detector')">+ Add drop</button>
-  `;
-  c.innerHTML = S.drops.length ? `
+  document.getElementById('tba').innerHTML = S.drops.length
+    ? `<button class="btn btn-sm btn-r" onclick="dropsClearAll()">Clear all</button>`
+    : '';
+
+  const dropsTable = S.drops.length ? `
+<div class="section-lbl" style="margin-top:20px">Tracked drops</div>
 <div class="dt">
-  <div class="dt-hd"><div class="dth">Collection</div><div class="dth">Standard</div><div class="dth">Best phase</div><div class="dth">Status</div><div class="dth"></div></div>
+  <div class="dt-hd">
+    <div class="dth">Collection</div>
+    <div class="dth">Standard</div>
+    <div class="dth">Best phase</div>
+    <div class="dth">Status</div>
+    <div class="dth" style="min-width:120px"></div>
+  </div>
   ${S.drops.map(d => {
     const best = d.phases?.find(p=>p.status==='live') || d.phases?.find(p=>p.status==='scheduled') || d.phases?.[0];
     return `<div class="dt-row">
@@ -1433,30 +1446,40 @@ function renderDrops() {
       <div class="dtd"><span class="tb tb-${allowStdClass(d.stdClass)}">${esc(d.std||'ERC-721A')}</span></div>
       <div class="dtd" style="font-size:12px">${best?esc(best.label):'—'}</div>
       <div class="dtd">${(d.phases||[]).map(p=>`<span class="st st-${p.status==='live'?'live':p.status==='scheduled'?'pend':'end'}" style="margin:1px 2px 1px 0;font-size:9.5px">${esc(p.status)}</span>`).join('')||'—'}</div>
-      <div class="dtd" style="display:flex;gap:5px">
+      <div class="dtd" style="display:flex;gap:6px;align-items:center">
         <button class="btn btn-p btn-xs" onclick="openModal('${esc(d.id)}')">⚡ Mint</button>
-        <button class="btn btn-xs btn-r" onclick="dropDelete('${esc(d.id)}')">✕</button>
+        <button class="btn btn-xs" style="background:rgba(240,64,64,.15);color:var(--red);border:1px solid rgba(240,64,64,.3);padding:3px 9px" onclick="dropDelete('${esc(d.id)}')">✕ Remove</button>
       </div>
     </div>`;}).join('')}
+</div>` : '';
+
+  c.innerHTML = `
+<div class="card">
+  <div class="card-hd"><span style="font-size:15px">◎</span><h2>Detect contract</h2><span style="font-size:10.5px;color:var(--text3)">ETH · Base · Blast</span></div>
+  <div class="card-body">
+    <div style="display:flex;gap:8px">
+      <input class="fi" id="det-in" placeholder="0x...  or  opensea.io/collection/...  or  magiceden.io/collections/..."
+             style="flex:1;font-family:var(--mono)" oninput="detOnInput()" onkeydown="if(event.key==='Enter')detRun()">
+      <button class="btn btn-p" onclick="detRun()" id="det-btn">⚡ Detect</button>
+    </div>
+    <div style="font-size:10.5px;color:var(--text3);margin-top:8px">SeaDrop · ERC-721A · ERC-721C · Manifold · Thirdweb · custom mint()</div>
+  </div>
 </div>
-<div class="ban ban-i"><div class="ban-ico">ℹ</div><div class="ban-txt">For SeaDrop/OpenSea drops: calldata is fetched per wallet at preflight. Wallet eligibility checked automatically.</div></div>` : `
-<div class="card"><div class="es">
-  <div class="es-icon">◈</div>
-  <div class="es-title">No drops tracked</div>
-  <div class="es-sub">Use the Detector to add a contract</div>
-  <button class="btn btn-p" onclick="go('detector')" style="margin-top:12px">+ Detect contract</button>
-</div></div>`;
+
+<div id="det-result" style="display:none"></div>
+
+${dropsTable}`;
 }
 
 function dropDelete(id) {
   S.drops = S.drops.filter(d=>d.id!==id);
-  saveState(); updateBadges(); go('drops');
+  saveState(); updateBadges(); renderDrops();
   toast('Drop removed','ℹ');
 }
 function dropsClearAll() {
   if(!S.drops.length) return;
   if(!confirm('Clear all drops?')) return;
-  S.drops = []; saveState(); updateBadges(); go('drops');
+  S.drops = []; saveState(); updateBadges(); renderDrops();
   toast('All drops cleared','ℹ');
 }
 
@@ -1474,17 +1497,21 @@ function renderTasks() {
     const stClass = isQueued ? 'q' : isRunning ? 'run' : t.status === 'completed' ? 'ok' : 'fail';
     const speed = t.avgConfirmMs ? `<span style="font-size:10px;color:var(--green);font-family:var(--mono)">${t.avgConfirmMs}ms</span>` : '';
     const sched = t.scheduledFor ? `<div style="font-size:10px;color:var(--amber);margin-top:2px;font-family:var(--mono)">${esc(t.scheduledFor)}</div>` : '';
+    const priorityBadge = t.priority ? `<span style="font-size:9px;color:var(--amber);font-weight:700;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);border-radius:3px;padding:1px 5px;margin-right:4px">PRIORITY</span>` : '';
     return `
   <div class="rr">
     <div class="rd" style="background:${dotColor}"></div>
     <div class="ri">
-      <div class="rn">${esc(t.name || t.drop)}</div>
+      <div class="rn">${priorityBadge}${esc(t.name || t.drop)}</div>
       <div class="rm">${esc(t.route || '')} · ${t.wallets} wallet${t.wallets !== 1 ? 's' : ''} · qty ${t.qty}${t.time ? ' · ' + esc(t.time) : ''}</div>
       ${sched}
     </div>
     ${speed}
     <div class="st st-${stClass}">${t.status.toUpperCase()}</div>
-    ${isQueued ? `<button class="btn btn-r btn-xs" onclick="cancelTask('${esc(t.id)}')">Cancel</button>` : ''}
+    ${isQueued ? `
+      <button class="btn btn-p btn-xs" onclick="taskRunNow('${esc(t.id)}')" title="Skip queue and execute immediately">▶ Now</button>
+      <button class="btn btn-r btn-xs" onclick="cancelTask('${esc(t.id)}')">✕</button>
+    ` : ''}
   </div>`;
   }).join('')}
 </div>` : `
@@ -1503,6 +1530,16 @@ async function cancelTask(id) {
   saveState(); updateBadges();
   toast('Task cancelled','ℹ');
   go('tasks');
+}
+
+async function taskRunNow(id) {
+  if (!API_ONLINE) { toast('Backend required to run tasks','⚠'); return; }
+  try {
+    await RV3_API.runTaskNow(id);
+    toast('Task executing now','✓');
+  } catch (e) {
+    toast(e.message || 'Failed to trigger task','⚠');
+  }
 }
 
 // ── DELEGATION ──

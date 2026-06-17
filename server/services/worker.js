@@ -44,8 +44,10 @@ function isTaskReady(task) {
   return Date.now() >= at - 1;
 }
 
-function pickNextQueued() {
-  const mintTask = state.tasks.find(t => t.status === 'queued' && isTaskReady(t));
+function pickNextQueued(priorityId) {
+  const mintTasks = state.tasks.filter(t => t.status === 'queued' && isTaskReady(t));
+  let mintTask = priorityId ? mintTasks.find(t => t.id === priorityId) : null;
+  if (!mintTask) mintTask = mintTasks.find(t => t.priority) || mintTasks[0];
   if (mintTask) return { type: 'mint', item: mintTask };
   const fundOp = state.fundOps.find(o => o.status === 'queued');
   if (fundOp) return { type: 'fund', item: fundOp };
@@ -196,11 +198,11 @@ async function processSweepOp(op) {
   save();
 }
 
-async function tick() {
+async function tick(priorityId) {
   if (running) return;
   running = true;
   try {
-    const next = pickNextQueued();
+    const next = pickNextQueued(priorityId);
     if (!next) return;
     if (next.type === 'mint') await processMintTask(next.item);
     else if (next.type === 'fund') await processFundOp(next.item);
@@ -213,11 +215,18 @@ async function tick() {
   }
 }
 
+async function runNow(taskId) {
+  const task = state.tasks.find(t => t.id === taskId && t.status === 'queued');
+  if (!task) throw new Error('Task not found or not queued');
+  task.priority = true;
+  await tick(taskId);
+}
+
 function start() {
-  setInterval(tick, 2000);
+  setInterval(tick, 500);
   setInterval(() => { refreshWalletBalances().then(save).catch(() => {}); }, 45000);
   store.appendLog(state, 'info', 'RV3 worker started (mint · fund · sweep)');
   save();
 }
 
-module.exports = { start, tick, getState, setState, save, refreshWalletBalances };
+module.exports = { start, tick, runNow, getState, setState, save, refreshWalletBalances };
