@@ -1577,9 +1577,11 @@ async function cancelTask(id) {
 
 async function taskRunNow(id) {
   if (!API_ONLINE) { toast('Backend required to run tasks','⚠'); return; }
+  const task = S.tasks.find(t => t.id === id);
   try {
-    await RV3_API.runTaskNow(id);
+    await RV3_API.runTaskNow(id, task);
     toast('Task executing now','✓');
+    go('tasks');
   } catch (e) {
     toast(e.message || 'Failed to trigger task','⚠');
   }
@@ -1589,8 +1591,9 @@ async function taskPrewarm(id) {
   if (!API_ONLINE) { toast('Backend required','⚠'); return; }
   const btn = document.getElementById('prewarm-btn-' + id);
   if (btn) { btn.textContent = '⟳ Warming…'; btn.disabled = true; }
+  const task = S.tasks.find(t => t.id === id);
   try {
-    const { warmed } = await RV3_API.prewarmTask(id);
+    const { warmed } = await RV3_API.prewarmTask(id, task);
     if (btn) { btn.textContent = `✓ Ready (${warmed})`; btn.style.color = 'var(--green)'; btn.style.borderColor = 'rgba(15,207,133,.3)'; btn.style.background = 'rgba(15,207,133,.1)'; }
     toast(`Pre-warm complete — ${warmed} wallet(s) ready`, '✓');
   } catch (e) {

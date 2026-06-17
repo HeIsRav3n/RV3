@@ -113,12 +113,16 @@ const RV3_API = {
     return this.request(`/tasks/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
 
-  async runTaskNow(id) {
-    return this.request(`/tasks/${encodeURIComponent(id)}/run`, { method: 'POST', body: '{}' });
+  async runTaskNow(id, task) {
+    return this.request(`/tasks/${encodeURIComponent(id)}/run`, {
+      method: 'POST', body: JSON.stringify({ task }),
+    });
   },
 
-  async prewarmTask(id) {
-    return this.request(`/tasks/${encodeURIComponent(id)}/prewarm`, { method: 'POST', body: '{}' });
+  async prewarmTask(id, task) {
+    return this.request(`/tasks/${encodeURIComponent(id)}/prewarm`, {
+      method: 'POST', body: JSON.stringify({ task }),
+    });
   },
 
   async prioritizeTask(id) {

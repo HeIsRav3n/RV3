@@ -15,6 +15,8 @@ const tx = require('../services/tx');
 const { encrypt, addressFromKey } = require('../services/crypto');
 const walletStore = require('../services/wallets');
 const prewarm = require('../services/prewarm');
+const taskStore = require('../services/taskStore');
+const mint = require('../services/mint');
 
 const router = express.Router();
 
@@ -293,11 +295,33 @@ router.post('/wallets/batch-delete', async (req, res) => {
   }
 });
 
-router.get('/tasks', (req, res) => {
-  res.json({ tasks: state().tasks });
+router.get('/tasks', async (req, res) => {
+  try {
+    const persisted = await taskStore.loadTasks();
+    // Merge with in-memory (in-memory wins for running tasks)
+    const s = state();
+    for (const t of persisted) {
+      if (!s.tasks.find(x => x.id === t.id)) s.tasks.unshift(t);
+    }
+    res.json({ tasks: s.tasks });
+  } catch {
+    res.json({ tasks: state().tasks });
+  }
 });
 
-router.post('/tasks', taskLimiter, (req, res) => {
+async function resolveTask(id, bodyTask) {
+  // 1. in-memory
+  let task = state().tasks.find(t => t.id === id);
+  if (task) return task;
+  // 2. Neon / file
+  task = await taskStore.getTask(id);
+  if (task) { state().tasks.unshift(task); return task; }
+  // 3. caller passed the full task object (frontend fallback)
+  if (bodyTask?.id === id) { state().tasks.unshift(bodyTask); return bodyTask; }
+  return null;
+}
+
+router.post('/tasks', taskLimiter, async (req, res) => {
   const body = req.body || {};
   const s = state();
   const gasPreset = body.gasPreset || 'normal';
@@ -326,14 +350,19 @@ router.post('/tasks', taskLimiter, (req, res) => {
     rpcUrls: (body.rpcUrls || []).filter(u => typeof u === 'string' && u.startsWith('https://')),
     createdAt: new Date().toISOString(),
   };
+
   s.tasks.unshift(task);
-  store.appendLog(s, 'info', `Task queued: ${task.name}${task.openseaSlug ? ` · ${task.openseaSlug}` : ''}`);
+  store.appendLog(s, 'info', `Task queued: ${task.name}`);
   worker.save();
 
-  // Start pre-warming immediately after responding — non-blocking
+  // Persist to Neon so any Lambda can find it
+  taskStore.saveTask(task).catch(() => {});
+
+  // Pre-warm immediately (non-blocking)
   if (task.openseaSlug) {
+    const wallets = await walletStore.loadWallets().catch(() => s.wallets);
     const log = (level, msg) => store.appendLog(s, level, msg);
-    setImmediate(() => prewarm.prewarmTask(task, s.wallets, log).catch(() => {}));
+    setImmediate(() => prewarm.prewarmTask(task, wallets, log).catch(() => {}));
   }
 
   res.json({ task });
@@ -341,12 +370,13 @@ router.post('/tasks', taskLimiter, (req, res) => {
 
 router.post('/tasks/:id/prewarm', async (req, res) => {
   try {
-    const task = state().tasks.find(t => t.id === req.params.id);
+    const task = await resolveTask(req.params.id, req.body?.task);
     if (!task) return res.status(404).json({ error: 'Task not found' });
     if (!task.openseaSlug) return res.status(400).json({ error: 'No OpenSea slug on task' });
+    const wallets = await walletStore.loadWallets().catch(() => state().wallets);
     const log = (level, msg) => store.appendLog(state(), level, msg);
-    await prewarm.prewarmTask(task, state().wallets, log);
-    const warmed = state().wallets
+    await prewarm.prewarmTask(task, wallets, log);
+    const warmed = wallets
       .filter(w => w.encryptedKey).slice(0, task.wallets || 1)
       .filter(w => prewarm.isReady(task.id, w.id)).length;
     res.json({ ok: true, warmed });
@@ -357,25 +387,83 @@ router.post('/tasks/:id/prewarm', async (req, res) => {
 
 router.post('/tasks/:id/run', async (req, res) => {
   try {
-    await worker.runNow(req.params.id);
-    res.json({ ok: true });
+    const task = await resolveTask(req.params.id, req.body?.task);
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (task.status !== 'queued') return res.status(400).json({ error: `Task is ${task.status}` });
+
+    // Load wallets from Neon so this works on any Lambda
+    const wallets = await walletStore.loadWallets().catch(() => state().wallets);
+
+    // Mark running immediately
+    task.status = 'running';
+    task.startedAt = new Date().toISOString();
+    await taskStore.updateTaskStatus(task.id, 'running', { startedAt: task.startedAt });
+
+    // Respond immediately so the UI shows "running" — then execute
+    res.json({ ok: true, status: 'running' });
+
+    // Execute synchronously in this Lambda (Vercel allows up to 300s on Pro)
+    const log = (level, msg) => store.appendLog(state(), level, msg);
+    try {
+      if (!config.enableLiveMint) {
+        task.status = 'completed';
+        task.note = 'Preflight only — set ENABLE_LIVE_MINT=true';
+        await taskStore.updateTaskStatus(task.id, 'completed', { note: task.note });
+        return;
+      }
+      if (!task.openseaSlug) throw new Error('Missing openseaSlug');
+
+      // Pre-warm if not already done
+      const cached = wallets.filter(w => w.encryptedKey).slice(0, task.wallets || 1)
+        .every(w => prewarm.isReady(task.id, w.id));
+      if (!cached) await prewarm.prewarmTask(task, wallets, log);
+
+      const result = await mint.runMintTask(task, wallets, log);
+      const { ethers } = require('ethers');
+      const gasEth = parseFloat(ethers.formatEther(result.totalGas || 0n));
+      task.status = result.minted > 0 ? 'completed' : 'failed';
+      task.minted = result.minted;
+      task.txHashes = result.txHashes;
+      task.avgConfirmMs = result.avgConfirmMs;
+      task.error = result.errors.length ? result.errors.join('; ') : null;
+      task.finishedAt = new Date().toISOString();
+      await taskStore.updateTaskStatus(task.id, task.status, {
+        minted: task.minted, txHashes: task.txHashes,
+        avgConfirmMs: task.avgConfirmMs, error: task.error,
+        finishedAt: task.finishedAt,
+      });
+      notify.send(`RV3 mint ${task.status}`, `${task.drop} · ${task.minted} minted`).catch(() => {});
+    } catch (e) {
+      task.status = 'failed';
+      task.error = e.message;
+      task.finishedAt = new Date().toISOString();
+      await taskStore.updateTaskStatus(task.id, 'failed', { error: e.message, finishedAt: task.finishedAt });
+      log('err', e.message);
+      notify.send('RV3 mint failed', `${task.drop} · ${e.message}`).catch(() => {});
+    }
   } catch (e) {
-    res.status(400).json({ error: e.message });
+    if (!res.headersSent) res.status(500).json({ error: e.message });
   }
 });
 
-router.post('/tasks/:id/priority', (req, res) => {
-  const task = state().tasks.find(t => t.id === req.params.id);
-  if (!task) return res.status(404).json({ error: 'Task not found' });
-  task.priority = true;
-  worker.save();
-  res.json({ ok: true });
+router.post('/tasks/:id/priority', async (req, res) => {
+  try {
+    const task = await resolveTask(req.params.id, req.body?.task);
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    task.priority = true;
+    await taskStore.updateTaskStatus(task.id, task.status, { priority: true });
+    worker.save();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-router.delete('/tasks/:id', (req, res) => {
+router.delete('/tasks/:id', async (req, res) => {
   const s = state();
   s.tasks = s.tasks.filter(t => t.id !== req.params.id);
   prewarm.clearTask(req.params.id);
+  await taskStore.deleteTask(req.params.id).catch(() => {});
   worker.save();
   res.json({ ok: true });
 });
