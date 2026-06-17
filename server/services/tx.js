@@ -4,10 +4,10 @@ const { ethers } = require('ethers');
 const config = require('../config');
 const rpc = require('./rpc');
 
-const GAS_PRESETS = { slow: 12, normal: 20, fast: 35, turbo: 60 };
+const GAS_PRESETS = { slow: 3, normal: 7, fast: 15, turbo: 25 };
 
 function gweiFromPreset(preset, custom) {
-  if (preset === 'custom' && custom) return Math.min(Math.max(parseFloat(custom) || 20, 1), 999);
+  if (preset === 'custom' && custom) return Math.min(Math.max(parseFloat(custom) || 7, 1), 999);
   return GAS_PRESETS[preset] || GAS_PRESETS.normal;
 }
 

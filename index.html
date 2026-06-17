@@ -853,7 +853,7 @@ const S = {
 };
 
 // gas presets (gwei)
-const GAS_PRESETS = { slow: 15, normal: 25, fast: 40, turbo: 80 };
+const GAS_PRESETS = { slow: 3, normal: 7, fast: 15, turbo: 25 };
 
 // PERSISTENCE: session-scoped, clears on close
 function saveState() {
@@ -2053,7 +2053,7 @@ function mGasPresetChange() {
 
 function mCalcEst() {
   const preset = document.getElementById('m-gas-preset')?.value || 'normal';
-  let gwei = GAS_PRESETS[preset] || 20;
+  let gwei = GAS_PRESETS[preset] || 7;
   if (preset === 'live' && S.gasGwei != null) {
     gwei = S.gasGwei;
   } else if (preset === 'custom') {
@@ -2120,7 +2120,7 @@ async function mSubmit() {
   const schedOn = document.getElementById('m-sched')?.checked;
   const schedTime = document.getElementById('m-sched-time')?.textContent || '';
   const preset = document.getElementById('m-gas-preset')?.value || 'normal';
-  let gwei = GAS_PRESETS[preset] || 25;
+  let gwei = GAS_PRESETS[preset] || 7;
   if(preset==='custom') gwei = sanitizeNum(document.getElementById('m-custom-gwei')?.value,1,999)||25;
   if(S.settings.maxSpendEth) {
     const gasEth = (gwei * S.gasLimitMint / 1e9) * selectedWallets;
@@ -2393,7 +2393,7 @@ function renderFundStep() {
     const hub = S.wallets.find(w=>w.id===FUND_STATE.hub);
     const srcWallets = S.wallets.filter(w=>FUND_STATE.sources.includes(w.id));
     const amt = parseFloat(FUND_STATE.amount)||0;
-    const gwei = GAS_PRESETS[FUND_STATE.gasPreset]||25;
+    const gwei = GAS_PRESETS[FUND_STATE.gasPreset]||7;
     const gasEth = (gwei*21000/1e9)*srcWallets.length;
     body = `
 <div class="ban ban-i"><div class="ban-ico">ℹ</div><div class="ban-txt">Review carefully. This will submit real blockchain transactions via your VPS worker.</div></div>
