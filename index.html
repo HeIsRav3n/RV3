@@ -2948,14 +2948,27 @@ function showApp() {
 }
 
 async function checkAuth() {
-  const verified = await RV3_Auth.verify();
-  if (verified) {
-    showApp();
-  } else {
-    document.getElementById('loginPage').style.display = 'flex';
-    document.getElementById('sidebar').style.display = 'none';
-    document.getElementById('main').style.display = 'none';
-    showLogin();
+  try {
+    // First check if server is running
+    const healthRes = await fetch('/health', { method: 'GET' });
+    if (!healthRes.ok) {
+      console.error('Server health check failed:', healthRes.status);
+      showLoginError('Server not responding — please check that npm start is running');
+      return;
+    }
+
+    const verified = await RV3_Auth.verify();
+    if (verified) {
+      showApp();
+    } else {
+      document.getElementById('loginPage').style.display = 'flex';
+      document.getElementById('sidebar').style.display = 'none';
+      document.getElementById('main').style.display = 'none';
+      showLogin();
+    }
+  } catch (e) {
+    console.error('Auth check error:', e);
+    showLoginError('Cannot connect to server — npm start may not be running');
   }
 }
 

@@ -16,6 +16,16 @@ const root = path.join(__dirname, '..');
 app.use(cors());
 app.use(express.json({ limit: '100kb' }));
 
+// Debug endpoint (no auth required)
+app.get('/health', (req, res) => {
+  res.json({
+    ok: true,
+    status: 'Server is running',
+    time: new Date().toISOString(),
+    env: process.env.NODE_ENV || 'development',
+  });
+});
+
 // Auth routes (no protection)
 app.use('/auth', authRoutes);
 
