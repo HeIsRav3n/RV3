@@ -4,53 +4,78 @@ const { ethers } = require('ethers');
 const opensea = require('./opensea');
 const tx = require('./tx');
 const rpc = require('./rpc');
+const prewarm = require('./prewarm');
 const { decrypt } = require('./crypto');
+
+const GAS_LIMIT = 350000n;
 
 async function executeMintForWallet(walletEntry, task, log) {
   const slug = task.openseaSlug;
-  if (!slug) throw new Error('No OpenSea slug — re-detect the drop and recreate the task');
+  if (!slug) throw new Error('No OpenSea slug — re-detect the drop');
 
   const pk = decrypt(walletEntry.encryptedKey);
+  const signer = new ethers.Wallet(pk);
+  const minter = await signer.getAddress();
+
   const urls = tx.pickSendUrls(task.route, task.rpcUrls || []);
   if (!urls.length) throw new Error('No RPC available');
 
-  const provider = new ethers.JsonRpcProvider(urls[0]);
-  const signer = new ethers.Wallet(pk, provider);
-  const minter = await signer.getAddress();
+  // ── Fast path: use pre-warmed calldata (simulation already done) ──
+  const cached = prewarm.getEntry(task.id, walletEntry.id);
+  let mintTx;
+  let alreadySimulated = false;
 
-  log('info', `${walletEntry.name} — building tx · ${slug} · qty ${task.qty || 1}`);
-  const mintTx = await opensea.buildDropMintTransaction(slug, minter, task.qty || 1);
+  if (cached?.mintTx && cached.simulated) {
+    mintTx = cached.mintTx;
+    alreadySimulated = true;
+    log('info', `${walletEntry.name} — pre-warmed ✓ skipping calldata fetch + simulation`);
+  } else {
+    // ── Slow path: fetch calldata now ──
+    log('info', `${walletEntry.name} — fetching calldata (not pre-warmed)`);
+    mintTx = await opensea.buildDropMintTransaction(slug, minter, task.qty || 1);
 
-  const gasGwei = task.gasGwei || tx.GAS_PRESETS.normal;
-  const gasLimit = 350000n;
-  const bal = await provider.getBalance(minter);
-  const gasCost = ethers.parseUnits(String(gasGwei), 'gwei') * gasLimit;
-  const need = mintTx.value + gasCost;
+    // balance check (skip when pre-warmed — already checked at pre-warm time)
+    const provider = new ethers.JsonRpcProvider(urls[0]);
+    const bal = await provider.getBalance(minter);
+    const gasGwei = task.gasGwei || tx.GAS_PRESETS.normal;
+    const gasCost = ethers.parseUnits(String(gasGwei), 'gwei') * GAS_LIMIT;
+    const need = mintTx.value + gasCost;
+    if (bal < need) {
+      throw new Error(
+        `${walletEntry.name}: need ${ethers.formatEther(need)} ETH, have ${ethers.formatEther(bal)}`
+      );
+    }
 
-  if (bal < need) {
-    throw new Error(`${walletEntry.name}: insufficient balance (need ${ethers.formatEther(need)} ETH, have ${ethers.formatEther(bal)} ETH)`);
+    log('info', `${walletEntry.name} — simulating…`);
+    await rpc.simulateCall(urls[0], minter, mintTx.to, mintTx.data, '0x' + mintTx.value.toString(16));
+    alreadySimulated = true;
+    log('info', `${walletEntry.name} — simulation passed`);
   }
 
-  log('info', `${walletEntry.name} — simulating tx…`);
-  const hexValue = '0x' + mintTx.value.toString(16);
-  await rpc.simulateCall(urls[0], minter, mintTx.to, mintTx.data, hexValue);
-  log('info', `${walletEntry.name} — simulation passed, broadcasting`);
+  // ── Phase 2+5: batch sign (nonce+chainId in one call) then blast broadcast ──
+  const gasGwei = task.gasGwei || tx.GAS_PRESETS.normal;
+  const start = Date.now();
 
-  const { hash, receipt, confirmMs } = await tx.sendTx(signer, {
+  const { signed } = await tx.buildAndSign(signer, {
     to: mintTx.to,
     data: mintTx.data,
     value: mintTx.value,
-    gasLimit,
-  }, {
-    route: task.route,
-    rpcUrls: task.rpcUrls,
-    gasGwei,
-    blast: task.rpcBlast !== false,
-    wait: true,
-    simulate: false, // already simulated above
-  });
+    gasLimit: GAS_LIMIT,
+  }, { rpcUrl: urls[0], gasGwei });
 
-  log('ok', `${walletEntry.name} — minted · ${hash.slice(0, 14)}… · block ${receipt.blockNumber} · ${confirmMs}ms`);
+  const hash = await tx.broadcastRaw(signed, urls);
+  log('info', `${walletEntry.name} — broadcast ${hash.slice(0, 14)}… (waiting for receipt)`);
+
+  const provider = new ethers.JsonRpcProvider(urls[0]);
+  const receipt = await provider.waitForTransaction(hash, 1, 120000);
+  if (!receipt || receipt.status === 0) throw new Error('Transaction reverted on-chain');
+
+  const confirmMs = Date.now() - start;
+  log('ok', `${walletEntry.name} — confirmed block ${receipt.blockNumber} · ${confirmMs}ms`);
+
+  // Clear pre-warm entry so nonce isn't reused
+  prewarm.clearTask(task.id);
+
   return { hash, gasUsed: receipt.gasUsed, confirmMs };
 }
 
@@ -64,6 +89,7 @@ async function runMintTask(task, wallets, log) {
   const txHashes = [];
   const errors = [];
 
+  // All wallets fire in parallel — fastest possible execution
   const results = await Promise.allSettled(selected.map(w => executeMintForWallet(w, task, log)));
 
   for (const res of results) {

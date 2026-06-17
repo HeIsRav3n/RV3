@@ -75,6 +75,58 @@ async function simulateCall(url, from, to, data, value = '0x0') {
   return j.result;
 }
 
+/**
+ * Batch JSON-RPC — fires multiple calls in a single HTTP request.
+ * Returns results array in the same order as calls.
+ * Falls back gracefully: if batch fails, runs calls individually.
+ */
+async function batchCall(url, calls, timeout = 5000) {
+  const body = calls.map((c, i) => ({
+    jsonrpc: '2.0', id: i + 1, method: c.method, params: c.params || [],
+  }));
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeout),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    // JSON-RPC batch responses may come back out of order — sort by id
+    if (!Array.isArray(data)) throw new Error('non-array batch response');
+    const ordered = new Array(calls.length);
+    for (const r of data) { if (r.id >= 1 && r.id <= calls.length) ordered[r.id - 1] = r.result ?? null; }
+    return ordered;
+  } catch {
+    // Fallback: individual calls
+    return Promise.all(calls.map(async c => {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: c.method, params: c.params || [] }),
+        signal: AbortSignal.timeout(timeout),
+      }).then(r => r.json());
+      return r.result ?? null;
+    }));
+  }
+}
+
+/**
+ * Fetch nonce + chainId in a single batch RPC call.
+ * Returns { nonce, chainId } — all numbers/bigints.
+ */
+async function getWalletNonceAndChain(url, address) {
+  const [nonceHex, chainHex] = await batchCall(url, [
+    { method: 'eth_getTransactionCount', params: [address, 'pending'] },
+    { method: 'eth_chainId', params: [] },
+  ]);
+  return {
+    nonce: parseInt(nonceHex, 16),
+    chainId: BigInt(chainHex),
+  };
+}
+
 function allRpcUrls(extra = []) {
   const urls = new Set();
   for (const r of config.envRpcs) urls.add(r.url);
@@ -97,4 +149,4 @@ function maskUrl(url) {
   }
 }
 
-module.exports = { ping, getBlockNumber, getBalance, getGasPrice, simulateCall, allRpcUrls, maskUrl };
+module.exports = { ping, getBlockNumber, getBalance, getGasPrice, simulateCall, batchCall, getWalletNonceAndChain, allRpcUrls, maskUrl };

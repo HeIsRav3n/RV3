@@ -1551,7 +1551,8 @@ function renderTasks() {
     ${speed}
     <div class="st st-${stClass}">${t.status.toUpperCase()}</div>
     ${isQueued ? `
-      <button class="btn btn-p btn-xs" onclick="taskRunNow('${esc(t.id)}')" title="Skip queue and execute immediately">▶ Now</button>
+      <button class="btn btn-xs" id="prewarm-btn-${esc(t.id)}" onclick="taskPrewarm('${esc(t.id)}')" title="Pre-fetch calldata + simulate now so execution is instant" style="background:rgba(74,124,252,.12);color:var(--accent3);border:1px solid rgba(74,124,252,.25)">⚡ Pre-warm</button>
+      <button class="btn btn-p btn-xs" onclick="taskRunNow('${esc(t.id)}')" title="Execute immediately">▶ Now</button>
       <button class="btn btn-r btn-xs" onclick="cancelTask('${esc(t.id)}')">✕</button>
     ` : ''}
   </div>`;
@@ -1581,6 +1582,20 @@ async function taskRunNow(id) {
     toast('Task executing now','✓');
   } catch (e) {
     toast(e.message || 'Failed to trigger task','⚠');
+  }
+}
+
+async function taskPrewarm(id) {
+  if (!API_ONLINE) { toast('Backend required','⚠'); return; }
+  const btn = document.getElementById('prewarm-btn-' + id);
+  if (btn) { btn.textContent = '⟳ Warming…'; btn.disabled = true; }
+  try {
+    const { warmed } = await RV3_API.prewarmTask(id);
+    if (btn) { btn.textContent = `✓ Ready (${warmed})`; btn.style.color = 'var(--green)'; btn.style.borderColor = 'rgba(15,207,133,.3)'; btn.style.background = 'rgba(15,207,133,.1)'; }
+    toast(`Pre-warm complete — ${warmed} wallet(s) ready`, '✓');
+  } catch (e) {
+    if (btn) { btn.textContent = '⚡ Pre-warm'; btn.disabled = false; }
+    toast(e.message || 'Pre-warm failed','⚠');
   }
 }
 

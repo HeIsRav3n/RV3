@@ -14,6 +14,7 @@ const pnl = require('../services/pnl');
 const tx = require('../services/tx');
 const { encrypt, addressFromKey } = require('../services/crypto');
 const walletStore = require('../services/wallets');
+const prewarm = require('../services/prewarm');
 
 const router = express.Router();
 
@@ -328,7 +329,30 @@ router.post('/tasks', taskLimiter, (req, res) => {
   s.tasks.unshift(task);
   store.appendLog(s, 'info', `Task queued: ${task.name}${task.openseaSlug ? ` · ${task.openseaSlug}` : ''}`);
   worker.save();
+
+  // Start pre-warming immediately after responding — non-blocking
+  if (task.openseaSlug) {
+    const log = (level, msg) => store.appendLog(s, level, msg);
+    setImmediate(() => prewarm.prewarmTask(task, s.wallets, log).catch(() => {}));
+  }
+
   res.json({ task });
+});
+
+router.post('/tasks/:id/prewarm', async (req, res) => {
+  try {
+    const task = state().tasks.find(t => t.id === req.params.id);
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (!task.openseaSlug) return res.status(400).json({ error: 'No OpenSea slug on task' });
+    const log = (level, msg) => store.appendLog(state(), level, msg);
+    await prewarm.prewarmTask(task, state().wallets, log);
+    const warmed = state().wallets
+      .filter(w => w.encryptedKey).slice(0, task.wallets || 1)
+      .filter(w => prewarm.isReady(task.id, w.id)).length;
+    res.json({ ok: true, warmed });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.post('/tasks/:id/run', async (req, res) => {
@@ -351,6 +375,7 @@ router.post('/tasks/:id/priority', (req, res) => {
 router.delete('/tasks/:id', (req, res) => {
   const s = state();
   s.tasks = s.tasks.filter(t => t.id !== req.params.id);
+  prewarm.clearTask(req.params.id);
   worker.save();
   res.json({ ok: true });
 });

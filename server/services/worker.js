@@ -11,6 +11,7 @@ const sweep = require('./sweep');
 const tx = require('./tx');
 const prices = require('./prices');
 const walletStore = require('./wallets');
+const prewarm = require('./prewarm');
 
 let running = false;
 let state = store.load();
@@ -44,6 +45,27 @@ function isTaskReady(task) {
   const at = parseScheduleTime(task);
   if (!at) return true;
   return Date.now() >= at - 1;
+}
+
+// Pre-warm tasks that are within 10s of their scheduled fire time (or immediately if unscheduled)
+async function prewarmPending() {
+  const now = Date.now();
+  const candidates = state.tasks.filter(t => {
+    if (t.status !== 'queued') return false;
+    if (!t.openseaSlug) return false;
+    const at = parseScheduleTime(t);
+    return !at || (at - now) <= 10_000;
+  });
+  for (const task of candidates) {
+    const hasPrewarm = state.wallets
+      .filter(w => w.encryptedKey)
+      .slice(0, task.wallets || 1)
+      .every(w => prewarm.isReady(task.id, w.id));
+    if (!hasPrewarm) {
+      const log = (level, msg) => store.appendLog(state, level, msg);
+      prewarm.prewarmTask(task, state.wallets, log).catch(() => {});
+    }
+  }
 }
 
 function pickNextQueued(priorityId) {
@@ -201,6 +223,9 @@ async function processSweepOp(op) {
 }
 
 async function tick(priorityId) {
+  // Always prewarm candidates before attempting to execute
+  prewarmPending().catch(() => {});
+
   if (running) return;
   running = true;
   try {
@@ -221,6 +246,11 @@ async function runNow(taskId) {
   const task = state.tasks.find(t => t.id === taskId && t.status === 'queued');
   if (!task) throw new Error('Task not found or not queued');
   task.priority = true;
+  // Prewarm immediately before executing if not already done
+  if (task.openseaSlug) {
+    const log = (level, msg) => store.appendLog(state, level, msg);
+    await prewarm.prewarmTask(task, state.wallets, log).catch(() => {});
+  }
   await tick(taskId);
 }
 

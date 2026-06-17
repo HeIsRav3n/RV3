@@ -117,6 +117,10 @@ const RV3_API = {
     return this.request(`/tasks/${encodeURIComponent(id)}/run`, { method: 'POST', body: '{}' });
   },
 
+  async prewarmTask(id) {
+    return this.request(`/tasks/${encodeURIComponent(id)}/prewarm`, { method: 'POST', body: '{}' });
+  },
+
   async prioritizeTask(id) {
     return this.request(`/tasks/${encodeURIComponent(id)}/priority`, { method: 'POST', body: '{}' });
   },
