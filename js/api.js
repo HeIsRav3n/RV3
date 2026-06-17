@@ -60,6 +60,10 @@ const RV3_API = {
     return data.usd;
   },
 
+  async gasPrice() {
+    return this.request('/gas');
+  },
+
   async envRpcs() {
     return this.request('/rpc/env');
   },

@@ -74,6 +74,18 @@ router.get('/price/eth', async (req, res) => {
   }
 });
 
+router.get('/gas', async (req, res) => {
+  try {
+    const urls = rpc.allRpcUrls();
+    if (!urls.length) return res.json({ gwei: null, usd: null });
+    const [gwei, ethUsd] = await Promise.all([rpc.getGasPrice(urls[0]), prices.getEthUsd()]);
+    const usdPer100k = (gwei * 100000 / 1e9) * ethUsd;
+    res.json({ gwei, ethUsd, usdPer100k: Math.round(usdPer100k * 100) / 100 });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 router.post('/detect', async (req, res) => {
   try {
     const input = String(req.body?.input || '').trim();

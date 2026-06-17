@@ -19,13 +19,60 @@ async function ping(url, timeout = 5000) {
 
 async function getBlockNumber(url) {
   const provider = new ethers.JsonRpcProvider(url);
-  return provider.getBlockNumber();
+  return Number(await provider.getBlockNumber());
 }
 
 async function getBalance(url, address) {
   const provider = new ethers.JsonRpcProvider(url);
   const wei = await provider.getBalance(address);
   return parseFloat(ethers.formatEther(wei));
+}
+
+async function getGasPrice(url) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_gasPrice', params: [], id: 1 }),
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || 'RPC error');
+  const gwei = Number(BigInt(data.result)) / 1e9;
+  return Math.round(gwei * 10) / 10;
+}
+
+function decodeRevertReason(hexData) {
+  if (!hexData || hexData === '0x') return null;
+  try {
+    if (hexData.startsWith('0x08c379a0')) {
+      const hex = hexData.slice(10);
+      const len = parseInt(hex.slice(64, 128), 16);
+      return Buffer.from(hex.slice(128, 128 + len * 2), 'hex').toString('utf8').replace(/\0/g, '');
+    }
+  } catch { /* */ }
+  return null;
+}
+
+async function simulateCall(url, from, to, data, value = '0x0') {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'eth_call',
+      params: [{ from, to, data: data || '0x', value }, 'latest'],
+      id: 1,
+    }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const j = await res.json();
+  if (j.error) {
+    const reason = decodeRevertReason(j.error.data) || j.error.message || 'execution reverted';
+    throw new Error(reason);
+  }
+  return j.result;
 }
 
 function allRpcUrls(extra = []) {
@@ -50,4 +97,4 @@ function maskUrl(url) {
   }
 }
 
-module.exports = { ping, getBlockNumber, getBalance, allRpcUrls, maskUrl };
+module.exports = { ping, getBlockNumber, getBalance, getGasPrice, simulateCall, allRpcUrls, maskUrl };

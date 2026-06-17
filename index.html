@@ -586,6 +586,7 @@ code{background:var(--bg4);padding:1px 5px;border-radius:4px;font-size:11px;font
 <div id="main" role="main" style="display:none">
   <div class="topbar" id="topbar">
     <div class="pg-title" id="pg-title">Overview</div>
+    <div id="topbar-gas" style="display:none;align-items:center;gap:8px;font-size:11px;padding:4px 10px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;margin-right:8px"></div>
     <div class="tba" id="tba"></div>
   </div>
   <div class="content" id="content" role="region" aria-live="polite"></div>
@@ -830,8 +831,9 @@ const S = {
   tasks: [],
   history: [],
   rpcs: [],
-  ethUsd: 1691, // live price fetched on load
-  gasLimitMint: 200000, // standard ERC-721 mint gas limit
+  ethUsd: 1691,
+  gasGwei: null,
+  gasLimitMint: 350000,
   settings: {
     defaultRoute: 'direct_rpc',
     maxSpendEth: '',
@@ -980,60 +982,82 @@ function updateBadges() {
 // ── OVERVIEW ──
 function renderOverview() {
   const c = document.getElementById('content');
-  const lowW = S.wallets.filter(w => w.eth < (parseFloat(S.settings.lowBalanceAlert)||0.01));
-  const liveDrops = S.drops.filter(d => d.phases && d.phases.some(p => p.status === 'live'));
+  const lowW = S.wallets.filter(w => w.eth < (parseFloat(S.settings.lowBalanceAlert) || 0.01));
+  const liveDrops = S.drops.filter(d => d.phases?.some(p => p.status === 'live'));
   const completedRuns = S.history.filter(r => r.status === 'completed').length;
   const failedRuns = S.history.filter(r => r.status === 'failed').length;
+  const avgSpeed = (() => {
+    const runs = S.history.filter(r => r.avgConfirmMs);
+    if (!runs.length) return null;
+    return Math.round(runs.reduce((a, r) => a + r.avgConfirmMs, 0) / runs.length);
+  })();
+  const totalGasUsd = S.history.reduce((a, r) => a + (r.gasCostUsd || 0), 0);
+  const gasGweiDisplay = S.gasGwei != null ? `${S.gasGwei} gwei` : 'N/A';
+  const gasMintUsd = S.gasGwei != null ? `$${((S.gasGwei * S.gasLimitMint / 1e9) * S.ethUsd).toFixed(2)}/tx` : '—';
 
   document.getElementById('tba').innerHTML = '';
 
   c.innerHTML = `
 <div class="stats-row">
-  <div class="sc s-a"><div class="sc-lbl">Wallets</div><div class="sc-val">${S.wallets.length||'—'}</div><div class="sc-sub">${S.wallets.length ? `${lowW.length} low balance` : 'No wallets added'}</div></div>
-  <div class="sc s-g"><div class="sc-lbl">Drops</div><div class="sc-val">${S.drops.length||'—'}</div><div class="sc-sub">${liveDrops.length} live phase${liveDrops.length!==1?'s':''}</div></div>
-  <div class="sc s-o"><div class="sc-lbl">Tasks</div><div class="sc-val">${S.tasks.length||'—'}</div><div class="sc-sub">${S.tasks.filter(t=>t.status==='queued').length} queued</div></div>
-  <div class="sc s-r"><div class="sc-lbl">Runs</div><div class="sc-val">${S.history.length||'—'}</div><div class="sc-sub">${completedRuns} completed · ${failedRuns} failed</div></div>
+  <div class="sc s-a"><div class="sc-lbl">Wallets</div><div class="sc-val">${S.wallets.length || '—'}</div><div class="sc-sub">${lowW.length ? `${lowW.length} low balance` : S.wallets.length ? 'All funded' : 'None added'}</div></div>
+  <div class="sc s-g"><div class="sc-lbl">Drops</div><div class="sc-val">${S.drops.length || '—'}</div><div class="sc-sub">${liveDrops.length} live</div></div>
+  <div class="sc s-o"><div class="sc-lbl">Gas</div><div class="sc-val" style="font-size:18px">${gasGweiDisplay}</div><div class="sc-sub">${gasMintUsd} per mint</div></div>
+  <div class="sc s-r"><div class="sc-lbl">Mint speed</div><div class="sc-val" style="font-size:18px">${avgSpeed != null ? avgSpeed + 'ms' : '—'}</div><div class="sc-sub">${completedRuns} confirmed · ${failedRuns} failed</div></div>
 </div>
-${lowW.length ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt">${lowW.length} wallet${lowW.length>1?'s':''} below threshold: ${lowW.map(w=>esc(w.name)).join(', ')}. Fund before next run.</div></div>` : ''}
-${!S.wallets.length ? `<div class="ban ban-i"><div class="ban-ico">ℹ</div><div class="ban-txt">No wallets added yet. Go to <span style="color:var(--accent3);cursor:pointer" onclick="go('wallets')">Wallets →</span> to import or generate.</div></div>` : ''}
-${!S.rpcs.length ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt">No RPC endpoints configured. Add your Alchemy/QuickNode URLs in <span style="color:var(--accent3);cursor:pointer" onclick="go('settings')">Settings →</span></div></div>` : ''}
+${lowW.length ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt">${lowW.length} wallet${lowW.length > 1 ? 's' : ''} below balance threshold: ${lowW.map(w => esc(w.name)).join(', ')}. Fund wallets before next run.</div></div>` : ''}
+${!S.wallets.length ? `<div class="ban ban-i"><div class="ban-ico">ℹ</div><div class="ban-txt">No wallets added. <span style="color:var(--accent3);cursor:pointer" onclick="go('wallets')">Add wallets</span> to get started.</div></div>` : ''}
+${!S.rpcs.length ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt">No RPC endpoints. <span style="color:var(--accent3);cursor:pointer" onclick="go('settings')">Add in Settings</span> for live execution.</div></div>` : ''}
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
 <div>
-  <div class="section-lbl">System health</div>
+  <div class="section-lbl">Status</div>
   <div class="card">
-    ${[['Database','OK',true],['Redis queue','OK',true],['VPS Mint Worker',S.rpcs.length?'ONLINE':'IDLE',true],['RPC Endpoints',S.rpcs.length ? `${S.rpcs.length} active` : '0 — add in Settings',!!S.rpcs.length]].map(([n,s,ok])=>`
-    <div style="display:flex;align-items:center;gap:9px;padding:9px 14px;border-bottom:1px solid var(--border)">
-      <div class="dot ${ok?'dg':'da'}"></div>
+    ${[
+      ['Backend', API_ONLINE ? 'Online' : 'Offline', API_ONLINE],
+      ['Worker', API_ONLINE ? 'Running' : 'Stopped', API_ONLINE],
+      ['RPC', S.rpcs.length ? `${S.rpcs.length} endpoint${S.rpcs.length !== 1 ? 's' : ''}` : 'None configured', !!S.rpcs.length],
+      ['Live mint', typeof config !== 'undefined' && config.enableLiveMint ? 'Enabled' : 'Preflight only', true],
+    ].map(([n, s, ok]) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border)">
+      <div class="dot ${ok ? 'dg' : 'da'}"></div>
       <div style="flex:1;font-size:12px;font-weight:500">${esc(n)}</div>
-      <div style="font-size:11px;color:${ok?'var(--green)':'var(--amber)'};font-weight:700">${esc(s)}</div>
+      <div style="font-size:11px;color:${ok ? 'var(--green)' : 'var(--amber)'};font-weight:600">${esc(s)}</div>
     </div>`).join('')}
-    <div style="padding:7px 14px;font-size:10px;color:var(--text3)">Last check: ${new Date().toLocaleTimeString()}</div>
+    ${totalGasUsd > 0 ? `<div style="padding:8px 14px;font-size:10.5px;color:var(--text2)">Total gas spent: <strong>$${totalGasUsd.toFixed(2)}</strong></div>` : ''}
   </div>
   ${liveDrops.length ? `
   <div class="section-lbl">Live now</div>
   <div class="card">${liveDrops.map(d => {
-    const live = d.phases.find(p => p.status==='live');
+    const live = d.phases.find(p => p.status === 'live');
     return `<div style="padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
-      <div style="flex:1"><div style="font-size:12.5px;font-weight:700">${esc(d.name)}</div><div style="font-size:10.5px;color:var(--green);margin-top:2px">⬤ ${esc(live.label)} · Live</div></div>
+      <div style="flex:1">
+        <div style="font-size:12.5px;font-weight:700">${esc(d.name)}</div>
+        <div style="font-size:10.5px;color:var(--green);margin-top:2px">${esc(live?.label || 'Live')}</div>
+      </div>
       <button class="btn btn-p btn-sm" onclick="openModal('${esc(d.id)}')">Mint</button>
     </div>`;
   }).join('')}</div>` : ''}
 </div>
 <div>
   <div class="section-lbl">Recent runs</div>
-  ${S.history.length ? `<div class="card">${S.history.slice(0,4).map(r=>`
+  ${S.history.length ? `<div class="card">${S.history.slice(0, 5).map(r => `
   <div class="rr">
-    <div class="rd" style="background:${r.status==='completed'?'var(--green)':r.status==='failed'?'var(--red)':'var(--amber)'}"></div>
-    <div class="ri"><div class="rn">${esc(r.drop)}</div><div class="rm">${esc(r.route||'')} · ${r.wallets} wallet${r.wallets!==1?'s':''} · ${esc(r.time)}</div></div>
-    <div class="st st-${r.status==='completed'?'ok':r.status==='failed'?'fail':'part'}">${r.status.toUpperCase()}</div>
-  </div>`).join('')}</div>` : `<div class="card"><div class="es"><div class="es-icon">◑</div><div class="es-title">No runs yet</div><div class="es-sub">Create a task and execute it</div></div></div>`}
+    <div class="rd" style="background:${r.status === 'completed' ? 'var(--green)' : r.status === 'failed' ? 'var(--red)' : 'var(--amber)'}"></div>
+    <div class="ri">
+      <div class="rn">${esc(r.drop)}</div>
+      <div class="rm">${esc(r.route || '')} · ${r.wallets} wallet${r.wallets !== 1 ? 's' : ''}${r.avgConfirmMs ? ` · ${r.avgConfirmMs}ms` : ''} · ${esc(r.time)}</div>
+    </div>
+    <div class="st st-${r.status === 'completed' ? 'ok' : r.status === 'failed' ? 'fail' : 'part'}">${r.status.toUpperCase()}</div>
+  </div>`).join('')}</div>` : `
+  <div class="card"><div class="es">
+    <div class="es-title">No runs yet</div>
+    <div class="es-sub">Create a task to begin minting</div>
+  </div></div>`}
   <div class="section-lbl" style="margin-top:14px">Quick actions</div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-    ${[['◎','Detect contract','detector'],['⚡','New mint task','_modal'],['◫','Manage wallets','wallets'],['📈','View PnL','pnl']].map(([icon,label,action])=>`
-    <button class="btn" onclick="${action==='_modal'?'openModal()':'go(\''+action+'\')'}" style="padding:11px;flex-direction:column;height:auto;gap:4px">
-      <span style="font-size:18px">${icon}</span>
-      <span style="font-size:11px;font-weight:600">${label}</span>
-    </button>`).join('')}
+    <button class="btn" onclick="go('detector')" style="padding:12px;flex-direction:column;height:auto;gap:5px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><circle cx="11" cy="11" r="3"/></svg><span style="font-size:11px;font-weight:600">Detect contract</span></button>
+    <button class="btn btn-p" onclick="openModal()" style="padding:12px;flex-direction:column;height:auto;gap:5px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5,3 19,12 5,21"/></svg><span style="font-size:11px;font-weight:600">New mint task</span></button>
+    <button class="btn" onclick="go('wallets')" style="padding:12px;flex-direction:column;height:auto;gap:5px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><circle cx="16" cy="15" r="1" fill="currentColor"/></svg><span style="font-size:11px;font-weight:600">Wallets</span></button>
+    <button class="btn" onclick="go('pnl')" style="padding:12px;flex-direction:column;height:auto;gap:5px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg><span style="font-size:11px;font-weight:600">PnL</span></button>
   </div>
 </div>
 </div>`;
@@ -1370,26 +1394,35 @@ function dropsClearAll() {
 // ── TASKS ──
 function renderTasks() {
   const c = document.getElementById('content');
-  document.getElementById('tba').innerHTML = `<button class="btn btn-p btn-sm" onclick="openModal()">+ New task</button>`;
+  document.getElementById('tba').innerHTML = `<button class="btn btn-p btn-sm" onclick="openModal()">New task</button>`;
   c.innerHTML = S.tasks.length ? `
 <div class="card">
-  ${S.tasks.map(t=>`
+  ${S.tasks.map(t => {
+    const isQueued = t.status === 'queued';
+    const isRunning = t.status === 'running';
+    const isDone = t.status === 'completed' || t.status === 'failed';
+    const dotColor = isQueued ? 'var(--amber)' : isRunning ? 'var(--accent)' : t.status === 'completed' ? 'var(--green)' : 'var(--red)';
+    const stClass = isQueued ? 'q' : isRunning ? 'run' : t.status === 'completed' ? 'ok' : 'fail';
+    const speed = t.avgConfirmMs ? `<span style="font-size:10px;color:var(--green);font-family:var(--mono)">${t.avgConfirmMs}ms</span>` : '';
+    const sched = t.scheduledFor ? `<div style="font-size:10px;color:var(--amber);margin-top:2px;font-family:var(--mono)">${esc(t.scheduledFor)}</div>` : '';
+    return `
   <div class="rr">
-    <div class="rd" style="background:${t.status==='queued'?'var(--amber)':t.status==='running'?'var(--accent)':'var(--green)'}"></div>
+    <div class="rd" style="background:${dotColor}"></div>
     <div class="ri">
-      <div class="rn">${esc(t.name||t.drop)}</div>
-      <div class="rm">${esc(t.route||'')} · ${t.wallets} wallet${t.wallets!==1?'s':''} · qty ${t.qty} · ${esc(t.time||'')}</div>
-      ${t.scheduledFor ? `<div style="font-size:10px;color:var(--amber);margin-top:2px;font-family:var(--mono)">⏰ Scheduled: ${esc(t.scheduledFor)}</div>` : ''}
+      <div class="rn">${esc(t.name || t.drop)}</div>
+      <div class="rm">${esc(t.route || '')} · ${t.wallets} wallet${t.wallets !== 1 ? 's' : ''} · qty ${t.qty}${t.time ? ' · ' + esc(t.time) : ''}</div>
+      ${sched}
     </div>
-    <div class="st st-${t.status==='queued'?'q':t.status==='running'?'run':'ok'}">${t.status.toUpperCase()}</div>
-    ${t.status==='queued'?`<button class="btn btn-r btn-xs" onclick="cancelTask('${esc(t.id)}')">Cancel</button>`:''}
-  </div>`).join('')}
+    ${speed}
+    <div class="st st-${stClass}">${t.status.toUpperCase()}</div>
+    ${isQueued ? `<button class="btn btn-r btn-xs" onclick="cancelTask('${esc(t.id)}')">Cancel</button>` : ''}
+  </div>`;
+  }).join('')}
 </div>` : `
 <div class="card"><div class="es">
-  <div class="es-icon">⚡</div>
-  <div class="es-title">No tasks queued</div>
-  <div class="es-sub">Create a task from a drop or detected contract</div>
-  <button class="btn btn-p" onclick="openModal()" style="margin-top:12px">+ New mint task</button>
+  <div class="es-title">No tasks</div>
+  <div class="es-sub">Detect a drop or paste a contract address, then create a task</div>
+  <button class="btn btn-p" onclick="openModal()" style="margin-top:12px">New mint task</button>
 </div></div>`;
 }
 
@@ -2019,9 +2052,11 @@ function mGasPresetChange() {
 
 function mCalcEst() {
   const preset = document.getElementById('m-gas-preset')?.value || 'normal';
-  let gwei = GAS_PRESETS[preset] || 25;
-  if(preset === 'custom') {
-    gwei = sanitizeNum(document.getElementById('m-custom-gwei')?.value, 1, 999) || 25;
+  let gwei = GAS_PRESETS[preset] || 20;
+  if (preset === 'live' && S.gasGwei != null) {
+    gwei = S.gasGwei;
+  } else if (preset === 'custom') {
+    gwei = sanitizeNum(document.getElementById('m-custom-gwei')?.value, 1, 999) || 20;
   }
   const gasLimit = S.gasLimitMint;
   const walletCount = document.querySelectorAll('#m-wallets .ws.on').length || 1;
@@ -2213,15 +2248,33 @@ async function fetchEthPrice() {
   try {
     if (API_ONLINE) {
       const usd = await RV3_API.ethPrice();
-      if (usd) S.ethUsd = usd;
+      if (usd) { S.ethUsd = usd; updateGasDisplay(); }
       return;
     }
   } catch { /* fallback */ }
   try {
     const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd', { signal: AbortSignal.timeout(3000) });
     const data = await res.json();
-    if(data?.ethereum?.usd) S.ethUsd = data.ethereum.usd;
+    if (data?.ethereum?.usd) { S.ethUsd = data.ethereum.usd; updateGasDisplay(); }
   } catch { /* use default */ }
+}
+
+async function fetchGasPrice() {
+  if (!API_ONLINE) return;
+  try {
+    const data = await RV3_API.gasPrice();
+    if (data?.gwei != null) { S.gasGwei = data.gwei; updateGasDisplay(); }
+  } catch { /* noop */ }
+}
+
+function updateGasDisplay() {
+  const el = document.getElementById('topbar-gas');
+  if (!el) return;
+  if (S.gasGwei == null) { el.style.display = 'none'; return; }
+  const usdPer = (S.gasGwei * S.gasLimitMint / 1e9) * S.ethUsd;
+  el.style.display = 'flex';
+  el.innerHTML = `<span style="color:var(--text3)">Gas</span><span style="font-weight:700;color:var(--text)">${S.gasGwei} gwei</span><span style="color:var(--text2)">≈ $${usdPer.toFixed(2)}/tx</span>`;
+  mCalcEst();
 }
 
 // FUND WALLETS
@@ -2999,6 +3052,7 @@ function showApp() {
   updateSystemStatus();
   updateBadges();
   fetchEthPrice();
+  fetchGasPrice();
   renderNotifPanel();
   // (Re)connect API — needed after logout/login without page reload
   apiConnect().then(async () => {
@@ -3068,8 +3122,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     if (API_ONLINE) {
       await syncFromServer();
+      fetchGasPrice();
       updateSystemStatus();
       if (document.getElementById('nav-tasks')?.classList.contains('act')) go('tasks');
+      if (document.getElementById('nav-overview')?.classList.contains('act')) go('overview');
     }
     if (!wasOnline && API_ONLINE) {
       await syncEnvRpcs();

@@ -4,30 +4,25 @@ const { ethers } = require('ethers');
 const config = require('../config');
 const rpc = require('./rpc');
 
-const GAS_PRESETS = { slow: 15, normal: 25, fast: 40, turbo: 80 };
+const GAS_PRESETS = { slow: 12, normal: 20, fast: 35, turbo: 60 };
 
 function gweiFromPreset(preset, custom) {
-  if (preset === 'custom' && custom) return Math.min(Math.max(parseFloat(custom) || 25, 1), 999);
+  if (preset === 'custom' && custom) return Math.min(Math.max(parseFloat(custom) || 20, 1), 999);
   return GAS_PRESETS[preset] || GAS_PRESETS.normal;
 }
 
 function pickSendUrls(route, extra = []) {
   const all = rpc.allRpcUrls(extra);
   const privateRpc = config.envRpcs.find(r => r.role === 'Private');
-  const routeLower = String(route || '').toLowerCase();
-  if (routeLower.includes('fb_protect') || routeLower.includes('flashbots protect')) {
+  const r = String(route || '').toLowerCase();
+  if (r.includes('fb_protect') || r.includes('flashbots protect') || r.includes('private')) {
     return privateRpc ? [privateRpc.url] : all.slice(0, 1);
   }
   return all.length ? all : [];
 }
 
 async function broadcastRaw(signedTx, urls) {
-  const payload = JSON.stringify({
-    jsonrpc: '2.0',
-    method: 'eth_sendRawTransaction',
-    params: [signedTx],
-    id: 1,
-  });
+  const payload = JSON.stringify({ jsonrpc: '2.0', method: 'eth_sendRawTransaction', params: [signedTx], id: 1 });
   const results = await Promise.allSettled(
     urls.map(url =>
       fetch(url, {
@@ -42,10 +37,7 @@ async function broadcastRaw(signedTx, urls) {
     )
   );
   const ok = results.find(r => r.status === 'fulfilled');
-  if (!ok) {
-    const msg = results.map(r => r.reason?.message || 'fail').join('; ');
-    throw new Error(msg || 'All RPC broadcasts failed');
-  }
+  if (!ok) throw new Error(results.map(r => r.reason?.message || 'broadcast failed').join(' | '));
   return ok.value;
 }
 
@@ -53,10 +45,11 @@ async function sendTx(signer, txRequest, opts = {}) {
   const {
     route = 'DIRECT RPC',
     rpcUrls = [],
-    gasGwei = 25,
+    gasGwei = 20,
     blast = true,
     wait = true,
     timeout = 120000,
+    simulate = true,
   } = opts;
 
   const urls = pickSendUrls(route, rpcUrls);
@@ -64,6 +57,7 @@ async function sendTx(signer, txRequest, opts = {}) {
 
   const provider = new ethers.JsonRpcProvider(urls[0]);
   const connected = signer.connect(provider);
+  const minter = await connected.getAddress();
   const nonce = txRequest.nonce ?? await connected.getNonce();
   const chainId = txRequest.chainId ?? (await provider.getNetwork()).chainId;
 
@@ -76,26 +70,34 @@ async function sendTx(signer, txRequest, opts = {}) {
     gasLimit: txRequest.gasLimit ?? 300000n,
     type: 2,
     maxFeePerGas: ethers.parseUnits(String(gasGwei), 'gwei'),
-    maxPriorityFeePerGas: ethers.parseUnits(String(Math.min(gasGwei, 3)), 'gwei'),
+    maxPriorityFeePerGas: ethers.parseUnits(String(Math.min(gasGwei, 2)), 'gwei'),
   };
 
-  if (blast && urls.length > 1 && !String(route).toLowerCase().includes('fb_protect')) {
+  // Simulate via eth_call before spending gas
+  if (simulate) {
+    const hexValue = '0x' + (tx.value ?? 0n).toString(16);
+    await rpc.simulateCall(urls[0], minter, tx.to, tx.data, hexValue);
+  }
+
+  const start = Date.now();
+
+  if (blast && urls.length > 1 && !String(route).toLowerCase().includes('private')) {
     const signed = await connected.signTransaction(tx);
     const hash = await broadcastRaw(signed, urls);
-    if (!wait) return { hash, receipt: null };
+    if (!wait) return { hash, receipt: null, confirmMs: Date.now() - start };
     const receipt = await provider.waitForTransaction(hash, 1, timeout);
-    if (!receipt || receipt.status === 0) throw new Error('Transaction reverted');
-    return { hash, receipt };
+    if (!receipt || receipt.status === 0) throw new Error('Transaction reverted on-chain');
+    return { hash, receipt, confirmMs: Date.now() - start };
   }
 
   const resp = await connected.sendTransaction(tx);
-  if (!wait) return { hash: resp.hash, receipt: null };
+  if (!wait) return { hash: resp.hash, receipt: null, confirmMs: Date.now() - start };
   const receipt = await resp.wait(1, timeout);
-  if (!receipt || receipt.status === 0) throw new Error('Transaction reverted');
-  return { hash: resp.hash, receipt };
+  if (!receipt || receipt.status === 0) throw new Error('Transaction reverted on-chain');
+  return { hash: resp.hash, receipt, confirmMs: Date.now() - start };
 }
 
-async function estimateGasCostEth(provider, gasGwei, gasLimit = 200000n) {
+async function estimateGasCostEth(gasGwei, gasLimit = 200000) {
   const fee = ethers.parseUnits(String(gasGwei), 'gwei') * BigInt(gasLimit);
   return parseFloat(ethers.formatEther(fee));
 }

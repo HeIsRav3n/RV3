@@ -111,6 +111,7 @@ async function processMintTask(task) {
     task.status = result.minted > 0 ? 'completed' : 'failed';
     task.minted = result.minted;
     task.txHashes = result.txHashes;
+    task.avgConfirmMs = result.avgConfirmMs;
     task.error = result.errors.length ? result.errors.join('; ') : null;
     task.note = result.minted > 0 ? `${result.minted} minted` : task.error;
     task.finishedAt = new Date().toISOString();
@@ -121,6 +122,7 @@ async function processMintTask(task) {
       wallets: task.wallets, qty: task.qty, time: new Date().toLocaleString(),
       status: task.status === 'completed' ? 'completed' : 'failed',
       minted: result.minted, gasEth, gasCostUsd,
+      avgConfirmMs: result.avgConfirmMs,
       txHash: result.txHashes[0] || null, note: task.note, openseaSlug: task.openseaSlug,
     });
     await notify.send(`RV3 mint ${task.status}`, `${task.drop} · ${task.note}`);
