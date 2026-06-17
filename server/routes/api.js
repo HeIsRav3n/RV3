@@ -424,12 +424,13 @@ router.post('/tasks/:id/run', async (req, res) => {
       task.minted = result.minted;
       task.txHashes = result.txHashes;
       task.avgBroadcastMs = result.avgBroadcastMs;
-      task.error = result.errors.length ? result.errors.join('; ') : null;
+      task.avgAttemptMs = result.avgAttemptMs;
+      task.error = result.errors.length ? result.errors[0] : null;
       task.finishedAt = new Date().toISOString();
       await taskStore.updateTaskStatus(task.id, task.status, {
         minted: task.minted, txHashes: task.txHashes,
-        avgBroadcastMs: task.avgBroadcastMs, error: task.error,
-        finishedAt: task.finishedAt,
+        avgBroadcastMs: task.avgBroadcastMs, avgAttemptMs: task.avgAttemptMs,
+        error: task.error, finishedAt: task.finishedAt,
       });
       const note = result.txHashes.length
         ? `${result.txHashes.length} tx(s) broadcast in ${result.avgBroadcastMs}ms`

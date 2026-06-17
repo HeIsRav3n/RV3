@@ -130,4 +130,24 @@ async function deleteTask(id) {
   fs.writeFileSync(FILE, JSON.stringify(tasks.filter(t => t.id !== id), null, 2));
 }
 
-module.exports = { loadTasks, getTask, saveTask, updateTaskStatus, deleteTask };
+// Persist pre-warm calldata to Neon so it survives Lambda hops on Vercel.
+// value is BigInt → stored as string, restored on read.
+async function savePrewarmCache(taskId, walletId, mintTx) {
+  const entry = {
+    to: mintTx.to,
+    data: mintTx.data,
+    value: mintTx.value.toString(),
+    savedAt: Date.now(),
+  };
+  await updateTaskStatus(taskId, 'queued', { [`pw_${walletId}`]: entry });
+}
+
+async function getPrewarmCache(taskId, walletId) {
+  const task = await getTask(taskId);
+  const entry = task?.[`pw_${walletId}`];
+  if (!entry) return null;
+  if (Date.now() - entry.savedAt > 90_000) return null; // 90s TTL matches in-memory
+  return { to: entry.to, data: entry.data, value: BigInt(entry.value) };
+}
+
+module.exports = { loadTasks, getTask, saveTask, updateTaskStatus, deleteTask, savePrewarmCache, getPrewarmCache };

@@ -5,6 +5,7 @@ const opensea = require('./opensea');
 const tx = require('./tx');
 const rpc = require('./rpc');
 const prewarm = require('./prewarm');
+const taskStore = require('./taskStore');
 const { decrypt } = require('./crypto');
 
 const GAS_LIMIT = 350000n;
@@ -28,8 +29,15 @@ async function executeMintForWallet(walletEntry, task, log) {
   if (cached?.mintTx && cached.simulated) {
     mintTx = cached.mintTx;
     alreadySimulated = true;
-    log('info', `${walletEntry.name} — pre-warmed ✓ skipping calldata fetch + simulation`);
+    log('info', `${walletEntry.name} — pre-warmed (memory) ✓`);
   } else {
+    // Check Neon-persisted prewarm cache (survives Lambda hops on Vercel)
+    const neonCached = await taskStore.getPrewarmCache(task.id, walletEntry.id).catch(() => null);
+    if (neonCached) {
+      mintTx = neonCached;
+      alreadySimulated = true;
+      log('info', `${walletEntry.name} — pre-warmed (Neon) ✓`);
+    } else {
     // ── Slow path: fetch calldata now ──
     log('info', `${walletEntry.name} — fetching calldata (not pre-warmed)`);
     mintTx = await opensea.buildDropMintTransaction(slug, minter, task.qty || 1);
@@ -50,6 +58,7 @@ async function executeMintForWallet(walletEntry, task, log) {
     await rpc.simulateCall(urls[0], minter, mintTx.to, mintTx.data, '0x' + mintTx.value.toString(16));
     alreadySimulated = true;
     log('info', `${walletEntry.name} — simulation passed`);
+    } // end slow path
   }
 
   // ── Phase 2+5: batch sign (nonce+chainId in one call) then blast broadcast ──
@@ -83,27 +92,40 @@ async function runMintTask(task, wallets, log) {
   let minted = 0;
   let totalGas = 0n;
   let totalBroadcastMs = 0;
+  let totalAttemptMs = 0;
   const txHashes = [];
   const errors = [];
 
-  // All wallets fire in parallel — fastest possible execution
-  const results = await Promise.allSettled(selected.map(w => executeMintForWallet(w, task, log)));
+  // Wrap each wallet call to capture attempt duration even on failure
+  const results = await Promise.allSettled(selected.map(async w => {
+    const t0 = Date.now();
+    try {
+      return await executeMintForWallet(w, task, log);
+    } catch (e) {
+      e.attemptMs = Date.now() - t0;
+      throw e;
+    }
+  }));
 
   for (const res of results) {
     if (res.status === 'fulfilled') {
       minted += task.qty || 1;
       totalGas += res.value.gasUsed || 0n;
       totalBroadcastMs += res.value.broadcastMs || 0;
+      totalAttemptMs += res.value.broadcastMs || 0;
       txHashes.push(res.value.hash);
     } else {
       const msg = res.reason?.message || String(res.reason);
       errors.push(msg);
+      totalAttemptMs += res.reason?.attemptMs || 0;
       log('err', msg);
     }
   }
 
+  const count = selected.length;
   const avgBroadcastMs = txHashes.length ? Math.round(totalBroadcastMs / txHashes.length) : null;
-  return { minted, txHashes, totalGas, errors, avgBroadcastMs };
+  const avgAttemptMs = count ? Math.round(totalAttemptMs / count) : null;
+  return { minted, txHashes, totalGas, errors, avgBroadcastMs, avgAttemptMs };
 }
 
 module.exports = { runMintTask, executeMintForWallet };

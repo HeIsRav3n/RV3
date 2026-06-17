@@ -1538,11 +1538,12 @@ function renderTasks() {
     const isBroadcast = t.status === 'broadcast';
     const dotColor = isQueued ? 'var(--amber)' : isRunning ? 'var(--accent)' : (isBroadcast || t.status === 'completed') ? 'var(--green)' : 'var(--red)';
     const stClass = isQueued ? 'q' : isRunning ? 'run' : (isBroadcast || t.status === 'completed') ? 'ok' : 'fail';
-    const broadcastMs = t.avgBroadcastMs || t.avgConfirmMs;
-    const speed = broadcastMs ? `<span style="font-size:10px;color:var(--green);font-family:var(--mono)">${broadcastMs}ms</span>` : '';
+    const displayMs = isBroadcast ? (t.avgBroadcastMs || t.avgConfirmMs) : (t.status === 'failed' ? t.avgAttemptMs : null);
+    const speed = displayMs ? `<span style="font-size:10px;color:${isBroadcast ? 'var(--green)' : 'var(--text3)'};font-family:var(--mono)">${displayMs}ms</span>` : '';
     const sched = t.scheduledFor ? `<div style="font-size:10px;color:var(--amber);margin-top:2px;font-family:var(--mono)">${esc(t.scheduledFor)}</div>` : '';
     const priorityBadge = t.priority ? `<span style="font-size:9px;color:var(--amber);font-weight:700;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);border-radius:3px;padding:1px 5px;margin-right:4px">PRIORITY</span>` : '';
     const txLink = t.txHashes?.length ? `<div style="font-size:10px;margin-top:2px"><a href="https://etherscan.io/tx/${t.txHashes[0]}" target="_blank" rel="noopener" style="color:var(--accent3);text-decoration:none">↗ ${t.txHashes[0].slice(0,14)}…</a></div>` : '';
+    const errorLine = t.status === 'failed' && t.error ? `<div style="font-size:10px;color:var(--red);margin-top:2px;font-family:var(--mono)" title="${esc(t.error)}">✗ ${esc(t.error.length > 90 ? t.error.slice(0,90)+'…' : t.error)}</div>` : '';
     const statusLabel = isBroadcast ? 'SENT' : t.status.toUpperCase();
     return `
   <div class="rr">
@@ -1550,7 +1551,7 @@ function renderTasks() {
     <div class="ri">
       <div class="rn">${priorityBadge}${esc(t.name || t.drop)}</div>
       <div class="rm">${esc(t.route || '')} · ${t.wallets} wallet${t.wallets !== 1 ? 's' : ''} · qty ${t.qty}${t.time ? ' · ' + esc(t.time) : ''}</div>
-      ${sched}${txLink}
+      ${sched}${txLink}${errorLine}
     </div>
     ${speed}
     <div class="st st-${stClass}">${statusLabel}</div>

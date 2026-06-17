@@ -13,6 +13,7 @@ const rpc = require('./rpc');
 const tx = require('./tx');
 const { decrypt } = require('./crypto');
 const { ethers } = require('ethers');
+const taskStore = require('./taskStore');
 
 const cache = new Map();
 
@@ -57,6 +58,8 @@ async function prewarmWallet(task, wallet, urls, log) {
     await rpc.simulateCall(urls[0], minter, mintTx.to, mintTx.data, hexValue);
 
     setEntry(task.id, wallet.id, { mintTx, minter, simulated: true, error: null });
+    // Persist to Neon so any Lambda can use it (Vercel Lambda isolation)
+    taskStore.savePrewarmCache(task.id, wallet.id, mintTx).catch(() => {});
     log('info', `prewarm OK: ${wallet.name}`);
     return true;
   } catch (e) {
