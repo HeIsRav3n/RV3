@@ -655,10 +655,11 @@ code{background:var(--bg4);padding:1px 5px;border-radius:4px;font-size:11px;font
     <div class="fg">
       <label class="fl" for="m-gas-preset">Gas preset</label>
       <select class="fs" id="m-gas-preset" onchange="mGasPresetChange()" style="margin-bottom:7px">
-        <option value="slow">Slow: 15 gwei</option>
-        <option value="normal" selected>Normal: 25 gwei</option>
-        <option value="fast">Fast: 40 gwei</option>
-        <option value="turbo">Turbo: 80 gwei</option>
+        <option value="slow">Slow: 3 gwei</option>
+        <option value="normal" selected>Normal: 7 gwei</option>
+        <option value="fast">Fast: 15 gwei</option>
+        <option value="turbo">Turbo: 25 gwei</option>
+        <option value="custom">Custom</option>
         <option value="custom">Custom gwei</option>
       </select>
       <div id="m-custom-gas-wrap" style="display:none;margin-top:5px">
@@ -2371,10 +2372,11 @@ function renderFundStep() {
   <div class="fg">
     <label class="fl">Gas preset</label>
     <select class="fs" id="fund-gas" onchange="FUND_STATE.gasPreset=this.value;fundUpdateReview()">
-      <option value="slow">Slow: 15 gwei</option>
-      <option value="normal" selected>Normal: 25 gwei</option>
-      <option value="fast">Fast: 40 gwei</option>
-      <option value="turbo">Turbo: 80 gwei</option>
+      <option value="slow">Slow: 3 gwei</option>
+      <option value="normal" selected>Normal: 7 gwei</option>
+      <option value="fast">Fast: 15 gwei</option>
+      <option value="turbo">Turbo: 25 gwei</option>
+      <option value="custom">Custom</option>
     </select>
   </div>
 </div>
@@ -2860,10 +2862,11 @@ function renderGuide() {
 <p>Select the drop and phase, pick your mint wallets, set quantity per wallet, choose gas preset, and select an inclusion route. The gas calculator shows ETH and USD cost before you submit.</p>
 <h4>Gas presets</h4>
 <ul>
-  <li><strong>Slow</strong> — 15 gwei. For low-congestion mints with no time pressure.</li>
-  <li><strong>Normal</strong> — 25 gwei. Standard. Works for most public mints.</li>
-  <li><strong>Fast</strong> — 40 gwei. Use for competitive public mints.</li>
-  <li><strong>Turbo</strong> — 80 gwei. Maximum speed. For high-demand FCFS drops.</li>
+  <li><strong>Slow</strong> — 3 gwei. Low congestion, no time pressure.</li>
+  <li><strong>Normal</strong> — 7 gwei. Standard for most public mints.</li>
+  <li><strong>Fast</strong> — 15 gwei. Competitive public mints.</li>
+  <li><strong>Turbo</strong> — 25 gwei. High-demand FCFS drops.</li>
+  <li><strong>Custom</strong> — Set your own gwei value.</li>
   <li><strong>Custom</strong> — Enter any gwei value. ETH and USD costs auto-calculate.</li>
 </ul>
 <h4>Inclusion routes</h4>
