@@ -3,13 +3,17 @@
   "builds": [
     {
       "src": "server/index.js",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": [
+          "index.html",
+          "js/**",
+          "assets/**"
+        ]
+      }
     }
   ],
   "routes": [
-    { "src": "/auth/(.*)", "dest": "server/index.js" },
-    { "src": "/api/(.*)", "dest": "server/index.js" },
-    { "src": "/health", "dest": "server/index.js" },
-    { "src": "/(.*)", "dest": "/$1" }
+    { "src": "/(.*)", "dest": "server/index.js" }
   ]
 }
