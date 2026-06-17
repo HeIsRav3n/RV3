@@ -1250,20 +1250,23 @@ ${S.wallets.length ? `
   <div class="card-body">
     <div class="fg">
       <label class="fl" for="wadd-name">Label / Name</label>
-      <input class="fi" id="wadd-name" placeholder="e.g. Main wallet" maxlength="30">
+      <input class="fi" id="wadd-name" placeholder="e.g. Mint wallet 1" maxlength="30">
     </div>
     <div class="fg">
       <label class="fl" for="wadd-key">Private Key or Address</label>
-      <input class="fi" id="wadd-key" type="password" placeholder="0x... (private key is never stored)" maxlength="66" autocomplete="off">
-      <div style="font-size:10px;color:var(--text3);margin-top:4px">⚠ Never share your private key. RV3 stores only an address hint — the raw key is cleared immediately and never saved.</div>
+      <input class="fi" id="wadd-key" type="password" placeholder="0x..." maxlength="66" autocomplete="off" oninput="walletKeyInput(this.value)">
+      <div style="font-size:10px;color:var(--text3);margin-top:4px">Key is encrypted server-side and never stored in the browser.</div>
     </div>
-    <div class="fg">
-      <label class="fl" for="wadd-bal">Current ETH balance (manual)</label>
-      <input class="fi" id="wadd-bal" type="number" step="0.0001" min="0" placeholder="e.g. 0.1500">
+    <div id="wadd-preview" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:10px 12px;margin-bottom:4px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span id="wadd-preview-status" style="font-size:11px;color:var(--text3)">Detecting…</span>
+        <span id="wadd-preview-addr" style="font-size:12px;font-weight:600;font-family:monospace;color:var(--text);word-break:break-all"></span>
+        <span id="wadd-preview-bal" style="font-size:12px;color:var(--green);margin-left:auto;white-space:nowrap"></span>
+      </div>
     </div>
     <div style="display:flex;gap:8px">
-      <button class="btn btn-p" onclick="walletSave()">Save wallet</button>
-      <button class="btn" onclick="document.getElementById('wallet-add-card').style.display='none'">Cancel</button>
+      <button class="btn btn-p" onclick="walletSave()">Import</button>
+      <button class="btn" onclick="walletAddClose()">Cancel</button>
     </div>
   </div>
 </div>`;
@@ -1294,44 +1297,109 @@ function wTab(tab, el) {
   else if(tab==='split') { setTimeout(()=>go('fund'),80); }
 }
 
+let _walletPreviewTimer = null;
+let _walletPreviewData = null;
+
+function walletAddClose() {
+  const card = document.getElementById('wallet-add-card');
+  if (card) card.style.display = 'none';
+  const key = document.getElementById('wadd-key');
+  if (key) key.value = '';
+  const preview = document.getElementById('wadd-preview');
+  if (preview) preview.style.display = 'none';
+  _walletPreviewData = null;
+}
+
 function walletImport() {
   const card = document.getElementById('wallet-add-card');
-  if(card) { card.style.display='block'; document.getElementById('wadd-title').textContent='Import Wallet'; }
+  if (card) {
+    card.style.display = 'block';
+    document.getElementById('wadd-title').textContent = 'Import Wallet';
+    document.getElementById('wadd-name').value = '';
+    const key = document.getElementById('wadd-key');
+    if (key) key.value = '';
+    const preview = document.getElementById('wadd-preview');
+    if (preview) preview.style.display = 'none';
+    _walletPreviewData = null;
+  }
 }
+
 function walletGenerate() {
   const card = document.getElementById('wallet-add-card');
-  if(card) { card.style.display='block'; document.getElementById('wadd-title').textContent='Generate New Wallet'; }
+  if (card) {
+    card.style.display = 'block';
+    document.getElementById('wadd-title').textContent = 'Generate New Wallet';
+    document.getElementById('wadd-name').value = '';
+    const key = document.getElementById('wadd-key');
+    if (key) key.value = '';
+    const preview = document.getElementById('wadd-preview');
+    if (preview) preview.style.display = 'none';
+    _walletPreviewData = null;
+  }
 }
+
+function walletKeyInput(val) {
+  const raw = val.trim();
+  const preview = document.getElementById('wadd-preview');
+  const statusEl = document.getElementById('wadd-preview-status');
+  const addrEl = document.getElementById('wadd-preview-addr');
+  const balEl = document.getElementById('wadd-preview-bal');
+  _walletPreviewData = null;
+
+  clearTimeout(_walletPreviewTimer);
+
+  const keyLen = raw.replace(/^0x/i, '').length;
+  if (keyLen < 64) {
+    if (preview) preview.style.display = 'none';
+    return;
+  }
+
+  if (preview) preview.style.display = 'block';
+  if (statusEl) statusEl.textContent = 'Detecting…';
+  if (addrEl) addrEl.textContent = '';
+  if (balEl) balEl.textContent = '';
+
+  _walletPreviewTimer = setTimeout(async () => {
+    try {
+      const data = await RV3_API.previewWallet(raw);
+      _walletPreviewData = data;
+      if (statusEl) statusEl.textContent = '';
+      if (addrEl) addrEl.textContent = data.address;
+      if (balEl) balEl.textContent = data.eth != null ? `${parseFloat(data.eth).toFixed(4)} ETH` : '';
+    } catch (e) {
+      if (statusEl) statusEl.textContent = e.message || 'Invalid key';
+      if (addrEl) addrEl.textContent = '';
+      if (balEl) balEl.textContent = '';
+      _walletPreviewData = null;
+    }
+  }, 600);
+}
+
 async function walletSave() {
   const name = document.getElementById('wadd-name')?.value?.trim();
   const key = document.getElementById('wadd-key')?.value?.trim();
-  const bal = parseFloat(document.getElementById('wadd-bal')?.value) || 0;
-  if(!name) { toast('Enter a wallet name','⚠'); return; }
-  if(!key) { toast('Enter a private key','⚠'); return; }
+  if (!name) { toast('Enter a wallet name', '⚠'); return; }
+  if (!key) { toast('Enter a private key', '⚠'); return; }
+
+  const bal = _walletPreviewData?.eth ?? 0;
   const keyEl = document.getElementById('wadd-key');
+
   try {
-    if (API_ONLINE && key.length >= 64) {
-      const { wallet } = await RV3_API.importWallet(name, key, bal);
-      S.wallets.push({ id: wallet.id, name: wallet.name, addr: wallet.addr, eth: wallet.eth || bal, nonce: 0, chain: 'ETH', low: bal < 0.01, serverKey: true });
-      if(keyEl) keyEl.value = '';
-      saveState(); updateBadges();
-      document.getElementById('wallet-add-card').style.display='none';
-      toast(`Wallet "${name}" encrypted on server`,'✓');
-      go('wallets');
-      return;
-    }
+    const { wallet } = await RV3_API.importWallet(name, key, bal);
+    S.wallets.push({
+      id: wallet.id, name: wallet.name, addr: wallet.addr,
+      address: wallet.address, eth: wallet.eth || bal,
+      nonce: 0, chain: 'ETH', low: (wallet.eth || bal) < 0.01, serverKey: true,
+    });
+    if (keyEl) keyEl.value = '';
+    _walletPreviewData = null;
+    saveState(); updateBadges();
+    walletAddClose();
+    toast(`Wallet "${name}" imported`, '✓');
+    go('wallets');
   } catch (e) {
-    toast(e.message || 'Server import failed','⚠');
-    return;
+    toast(e.message || 'Import failed', '⚠');
   }
-  const addrHint = key.startsWith('0x') && key.length >= 40 ? key.substring(0,8)+'...'+key.substring(key.length-6) : '0x???...???';
-  const id = 'w_' + Date.now();
-  S.wallets.push({ id, name, addr: addrHint, eth: bal, nonce: 0, chain: 'ETH', low: bal < 0.01 });
-  if(keyEl) keyEl.value = '';
-  saveState(); updateBadges();
-  document.getElementById('wallet-add-card').style.display='none';
-  toast(`Wallet "${name}" added (UI only — start backend for signing)`,'ℹ');
-  go('wallets');
 }
 async function walletDelete(id) {
   const w = S.wallets.find(w=>w.id===id);

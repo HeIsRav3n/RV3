@@ -79,6 +79,13 @@ const RV3_API = {
     return this.request('/wallets');
   },
 
+  async previewWallet(privateKey) {
+    return this.request('/wallets/preview', {
+      method: 'POST',
+      body: JSON.stringify({ privateKey }),
+    });
+  },
+
   async importWallet(name, privateKey, balance) {
     return this.request('/wallets/import', {
       method: 'POST',

@@ -190,6 +190,24 @@ router.post('/wallets/refresh', async (req, res) => {
   }
 });
 
+router.post('/wallets/preview', async (req, res) => {
+  try {
+    let key = String(req.body?.privateKey || '').trim();
+    if (!key) return res.status(400).json({ error: 'privateKey required' });
+    if (!key.startsWith('0x')) key = `0x${key}`;
+    const address = addressFromKey(key);
+    if (!address) return res.status(400).json({ error: 'Invalid private key' });
+    const urls = rpc.allRpcUrls();
+    let eth = 0;
+    if (urls.length) {
+      try { eth = await rpc.getBalance(urls[0], address); } catch { /* balance optional */ }
+    }
+    res.json({ address, eth });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 router.post('/wallets/import', (req, res) => {
   try {
     const name = String(req.body?.name || '').trim().slice(0, 80);
