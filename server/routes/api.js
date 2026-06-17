@@ -419,20 +419,22 @@ router.post('/tasks/:id/run', async (req, res) => {
       if (!cached) await prewarm.prewarmTask(task, wallets, log);
 
       const result = await mint.runMintTask(task, wallets, log);
-      const { ethers } = require('ethers');
-      const gasEth = parseFloat(ethers.formatEther(result.totalGas || 0n));
-      task.status = result.minted > 0 ? 'completed' : 'failed';
+      // "broadcast" = tx in mempool (got hash); "failed" = no hash at all
+      task.status = result.txHashes.length > 0 ? 'broadcast' : 'failed';
       task.minted = result.minted;
       task.txHashes = result.txHashes;
-      task.avgConfirmMs = result.avgConfirmMs;
+      task.avgBroadcastMs = result.avgBroadcastMs;
       task.error = result.errors.length ? result.errors.join('; ') : null;
       task.finishedAt = new Date().toISOString();
       await taskStore.updateTaskStatus(task.id, task.status, {
         minted: task.minted, txHashes: task.txHashes,
-        avgConfirmMs: task.avgConfirmMs, error: task.error,
+        avgBroadcastMs: task.avgBroadcastMs, error: task.error,
         finishedAt: task.finishedAt,
       });
-      notify.send(`RV3 mint ${task.status}`, `${task.drop} · ${task.minted} minted`).catch(() => {});
+      const note = result.txHashes.length
+        ? `${result.txHashes.length} tx(s) broadcast in ${result.avgBroadcastMs}ms`
+        : (task.error || 'no txs');
+      notify.send(`RV3 mint ${task.status}`, `${task.drop} · ${note}`).catch(() => {});
     } catch (e) {
       task.status = 'failed';
       task.error = e.message;

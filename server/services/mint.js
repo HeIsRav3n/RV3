@@ -64,19 +64,16 @@ async function executeMintForWallet(walletEntry, task, log) {
   }, { rpcUrl: urls[0], gasGwei });
 
   const hash = await tx.broadcastRaw(signed, urls);
-  log('info', `${walletEntry.name} — broadcast ${hash.slice(0, 14)}… (waiting for receipt)`);
-
-  const provider = new ethers.JsonRpcProvider(urls[0]);
-  const receipt = await provider.waitForTransaction(hash, 1, 120000);
-  if (!receipt || receipt.status === 0) throw new Error('Transaction reverted on-chain');
-
-  const confirmMs = Date.now() - start;
-  log('ok', `${walletEntry.name} — confirmed block ${receipt.blockNumber} · ${confirmMs}ms`);
+  const broadcastMs = Date.now() - start;
+  log('ok', `${walletEntry.name} — broadcast ${hash.slice(0, 14)}… in ${broadcastMs}ms`);
 
   // Clear pre-warm entry so nonce isn't reused
   prewarm.clearTask(task.id);
 
-  return { hash, gasUsed: receipt.gasUsed, confirmMs };
+  // Don't waitForTransaction — block confirmation (~12s) is chain-controlled and
+  // causes false "failed" status when the Lambda times out before the block arrives.
+  // The tx is already in the mempool; return hash immediately.
+  return { hash, gasUsed: 0n, broadcastMs };
 }
 
 async function runMintTask(task, wallets, log) {
@@ -85,7 +82,7 @@ async function runMintTask(task, wallets, log) {
 
   let minted = 0;
   let totalGas = 0n;
-  let totalConfirmMs = 0;
+  let totalBroadcastMs = 0;
   const txHashes = [];
   const errors = [];
 
@@ -96,7 +93,7 @@ async function runMintTask(task, wallets, log) {
     if (res.status === 'fulfilled') {
       minted += task.qty || 1;
       totalGas += res.value.gasUsed || 0n;
-      totalConfirmMs += res.value.confirmMs || 0;
+      totalBroadcastMs += res.value.broadcastMs || 0;
       txHashes.push(res.value.hash);
     } else {
       const msg = res.reason?.message || String(res.reason);
@@ -105,8 +102,8 @@ async function runMintTask(task, wallets, log) {
     }
   }
 
-  const avgConfirmMs = txHashes.length ? Math.round(totalConfirmMs / txHashes.length) : null;
-  return { minted, txHashes, totalGas, errors, avgConfirmMs };
+  const avgBroadcastMs = txHashes.length ? Math.round(totalBroadcastMs / txHashes.length) : null;
+  return { minted, txHashes, totalGas, errors, avgBroadcastMs };
 }
 
 module.exports = { runMintTask, executeMintForWallet };

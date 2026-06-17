@@ -134,21 +134,23 @@ async function processMintTask(task) {
     const gasEth = parseFloat(ethers.formatEther(result.totalGas || 0n));
     const gasCostUsd = gasEth * ethUsd;
 
-    task.status = result.minted > 0 ? 'completed' : 'failed';
+    task.status = result.txHashes.length > 0 ? 'broadcast' : 'failed';
     task.minted = result.minted;
     task.txHashes = result.txHashes;
-    task.avgConfirmMs = result.avgConfirmMs;
+    task.avgBroadcastMs = result.avgBroadcastMs;
     task.error = result.errors.length ? result.errors.join('; ') : null;
-    task.note = result.minted > 0 ? `${result.minted} minted` : task.error;
+    task.note = result.txHashes.length > 0
+      ? `${result.txHashes.length} tx(s) broadcast in ${result.avgBroadcastMs}ms`
+      : task.error;
     task.finishedAt = new Date().toISOString();
     save();
 
     await finishRun({
       id: `run_${Date.now()}`, type: 'mint', drop: task.drop, route: task.route,
       wallets: task.wallets, qty: task.qty, time: new Date().toLocaleString(),
-      status: task.status === 'completed' ? 'completed' : 'failed',
+      status: task.status,
       minted: result.minted, gasEth, gasCostUsd,
-      avgConfirmMs: result.avgConfirmMs,
+      avgBroadcastMs: result.avgBroadcastMs,
       txHash: result.txHashes[0] || null, note: task.note, openseaSlug: task.openseaSlug,
     });
     await notify.send(`RV3 mint ${task.status}`, `${task.drop} · ${task.note}`);

@@ -980,12 +980,12 @@ function renderOverview() {
   const c = document.getElementById('content');
   const lowW = S.wallets.filter(w => w.eth < (parseFloat(S.settings.lowBalanceAlert) || 0.01));
   const liveDrops = S.drops.filter(d => d.phases?.some(p => p.status === 'live'));
-  const completedRuns = S.history.filter(r => r.status === 'completed').length;
+  const completedRuns = S.history.filter(r => r.status === 'completed' || r.status === 'broadcast').length;
   const failedRuns = S.history.filter(r => r.status === 'failed').length;
   const avgSpeed = (() => {
-    const runs = S.history.filter(r => r.avgConfirmMs);
+    const runs = S.history.filter(r => r.avgBroadcastMs || r.avgConfirmMs);
     if (!runs.length) return null;
-    return Math.round(runs.reduce((a, r) => a + r.avgConfirmMs, 0) / runs.length);
+    return Math.round(runs.reduce((a, r) => a + (r.avgBroadcastMs || r.avgConfirmMs || 0), 0) / runs.length);
   })();
   const totalGasUsd = S.history.reduce((a, r) => a + (r.gasCostUsd || 0), 0);
   const gasGweiDisplay = S.gasGwei != null ? `${S.gasGwei} gwei` : 'N/A';
@@ -1037,12 +1037,13 @@ ${!S.rpcs.length ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div cl
   <div class="section-lbl">Recent runs</div>
   ${S.history.length ? `<div class="card">${S.history.slice(0, 5).map(r => `
   <div class="rr">
-    <div class="rd" style="background:${r.status === 'completed' ? 'var(--green)' : r.status === 'failed' ? 'var(--red)' : 'var(--amber)'}"></div>
+    <div class="rd" style="background:${(r.status === 'completed' || r.status === 'broadcast') ? 'var(--green)' : r.status === 'failed' ? 'var(--red)' : 'var(--amber)'}"></div>
     <div class="ri">
       <div class="rn">${esc(r.drop)}</div>
-      <div class="rm">${esc(r.route || '')} · ${r.wallets} wallet${r.wallets !== 1 ? 's' : ''}${r.avgConfirmMs ? ` · ${r.avgConfirmMs}ms` : ''} · ${esc(r.time)}</div>
+      <div class="rm">${esc(r.route || '')} · ${r.wallets} wallet${r.wallets !== 1 ? 's' : ''}${(r.avgBroadcastMs || r.avgConfirmMs) ? ` · ${r.avgBroadcastMs || r.avgConfirmMs}ms` : ''} · ${esc(r.time)}</div>
+      ${r.txHash ? `<div style="font-size:10px;margin-top:2px"><a href="https://etherscan.io/tx/${r.txHash}" target="_blank" rel="noopener" style="color:var(--accent3);text-decoration:none">↗ ${r.txHash.slice(0,14)}…</a></div>` : ''}
     </div>
-    <div class="st st-${r.status === 'completed' ? 'ok' : r.status === 'failed' ? 'fail' : 'part'}">${r.status.toUpperCase()}</div>
+    <div class="st st-${(r.status === 'completed' || r.status === 'broadcast') ? 'ok' : r.status === 'failed' ? 'fail' : 'part'}">${r.status === 'broadcast' ? 'SENT' : r.status.toUpperCase()}</div>
   </div>`).join('')}</div>` : `
   <div class="card"><div class="es">
     <div class="es-title">No runs yet</div>
@@ -1534,22 +1535,25 @@ function renderTasks() {
   ${S.tasks.map(t => {
     const isQueued = t.status === 'queued';
     const isRunning = t.status === 'running';
-    const isDone = t.status === 'completed' || t.status === 'failed';
-    const dotColor = isQueued ? 'var(--amber)' : isRunning ? 'var(--accent)' : t.status === 'completed' ? 'var(--green)' : 'var(--red)';
-    const stClass = isQueued ? 'q' : isRunning ? 'run' : t.status === 'completed' ? 'ok' : 'fail';
-    const speed = t.avgConfirmMs ? `<span style="font-size:10px;color:var(--green);font-family:var(--mono)">${t.avgConfirmMs}ms</span>` : '';
+    const isBroadcast = t.status === 'broadcast';
+    const dotColor = isQueued ? 'var(--amber)' : isRunning ? 'var(--accent)' : (isBroadcast || t.status === 'completed') ? 'var(--green)' : 'var(--red)';
+    const stClass = isQueued ? 'q' : isRunning ? 'run' : (isBroadcast || t.status === 'completed') ? 'ok' : 'fail';
+    const broadcastMs = t.avgBroadcastMs || t.avgConfirmMs;
+    const speed = broadcastMs ? `<span style="font-size:10px;color:var(--green);font-family:var(--mono)">${broadcastMs}ms</span>` : '';
     const sched = t.scheduledFor ? `<div style="font-size:10px;color:var(--amber);margin-top:2px;font-family:var(--mono)">${esc(t.scheduledFor)}</div>` : '';
     const priorityBadge = t.priority ? `<span style="font-size:9px;color:var(--amber);font-weight:700;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);border-radius:3px;padding:1px 5px;margin-right:4px">PRIORITY</span>` : '';
+    const txLink = t.txHashes?.length ? `<div style="font-size:10px;margin-top:2px"><a href="https://etherscan.io/tx/${t.txHashes[0]}" target="_blank" rel="noopener" style="color:var(--accent3);text-decoration:none">↗ ${t.txHashes[0].slice(0,14)}…</a></div>` : '';
+    const statusLabel = isBroadcast ? 'SENT' : t.status.toUpperCase();
     return `
   <div class="rr">
     <div class="rd" style="background:${dotColor}"></div>
     <div class="ri">
       <div class="rn">${priorityBadge}${esc(t.name || t.drop)}</div>
       <div class="rm">${esc(t.route || '')} · ${t.wallets} wallet${t.wallets !== 1 ? 's' : ''} · qty ${t.qty}${t.time ? ' · ' + esc(t.time) : ''}</div>
-      ${sched}
+      ${sched}${txLink}
     </div>
     ${speed}
-    <div class="st st-${stClass}">${t.status.toUpperCase()}</div>
+    <div class="st st-${stClass}">${statusLabel}</div>
     ${isQueued ? `
       <button class="btn btn-xs" id="prewarm-btn-${esc(t.id)}" onclick="taskPrewarm('${esc(t.id)}')" title="Pre-fetch calldata + simulate now so execution is instant" style="background:rgba(74,124,252,.12);color:var(--accent3);border:1px solid rgba(74,124,252,.25)">⚡ Pre-warm</button>
       <button class="btn btn-p btn-xs" onclick="taskRunNow('${esc(t.id)}')" title="Execute immediately">▶ Now</button>
