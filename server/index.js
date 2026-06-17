@@ -5,8 +5,10 @@ const express = require('express');
 const cors = require('cors');
 const config = require('./config');
 const auth = require('./middleware/auth');
+const authRoutes = require('./routes/auth');
 const apiRoutes = require('./routes/api');
 const worker = require('./services/worker');
+const { authRequired } = require('./routes/auth');
 
 const app = express();
 const root = path.join(__dirname, '..');
@@ -14,7 +16,11 @@ const root = path.join(__dirname, '..');
 app.use(cors());
 app.use(express.json({ limit: '100kb' }));
 
-app.use('/api', auth, apiRoutes);
+// Auth routes (no protection)
+app.use('/auth', authRoutes);
+
+// API routes (require auth)
+app.use('/api', authRequired, auth, apiRoutes);
 
 app.use(express.static(root, { index: 'index.html' }));
 
