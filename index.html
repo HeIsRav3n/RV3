@@ -2813,140 +2813,169 @@ function renderGuide() {
 
   const sections = [
     {
-      icon:'⚡',
-      title:'Quick Start',
-      body:`<div class="guide-step"><div class="guide-step-num">1</div><div class="guide-step-body"><div class="guide-step-title">Add RPC endpoints</div><div class="guide-step-desc">Go to Settings, then RPC Endpoints. Add your Alchemy, QuickNode, or dRPC URLs. Required to execute any transaction. RPC blast fires all endpoints simultaneously.</div></div></div>
-<div class="guide-step"><div class="guide-step-num">2</div><div class="guide-step-body"><div class="guide-step-title">Import your wallets</div><div class="guide-step-desc">Go to Wallets, then Import. Enter a label and private key. The raw key is never saved — only an address hint is kept in session storage. Set a low-balance alert in Settings.</div></div></div>
-<div class="guide-step"><div class="guide-step-num">3</div><div class="guide-step-body"><div class="guide-step-title">Detect a contract</div><div class="guide-step-desc">Go to Detector. Paste a contract address or URL from OpenSea, Magic Eden, Blur, Kingdomly, Manifold, Thirdweb, or any ERC-721A contract.</div></div></div>
-<div class="guide-step"><div class="guide-step-num">4</div><div class="guide-step-body"><div class="guide-step-title">Create a mint task</div><div class="guide-step-desc">Click Add to Drops from the Detector result, then Mint on the Drops page. Select phase, wallets, gas preset, and route. Check the gas calculator before submitting.</div></div></div>
-<div class="guide-step"><div class="guide-step-num">5</div><div class="guide-step-body"><div class="guide-step-title">Monitor execution</div><div class="guide-step-desc">Tasks run via your VPS worker. Check History for logs. The notification panel in the sidebar shows results live.</div></div></div>`
+      icon: '⚡',
+      title: 'Quick Start',
+      body: `
+<div class="guide-step"><div class="guide-step-num">1</div><div class="guide-step-body"><div class="guide-step-title">Add RPC endpoints</div><div class="guide-step-desc">Settings → RPC Endpoints. Add your Alchemy, QuickNode, or dRPC HTTPS URLs. RV3 signs once and blasts to all endpoints simultaneously — first confirmation wins.</div></div></div>
+<div class="guide-step"><div class="guide-step-num">2</div><div class="guide-step-body"><div class="guide-step-title">Import wallets</div><div class="guide-step-desc">Wallets → Import. Paste a label and private key. Keys are encrypted server-side and never stored in the browser. Set a low-balance threshold in Settings.</div></div></div>
+<div class="guide-step"><div class="guide-step-num">3</div><div class="guide-step-body"><div class="guide-step-title">Detect a contract</div><div class="guide-step-desc">Detector → paste a contract address or collection URL from OpenSea, Magic Eden, Blur, Manifold, or Thirdweb. RV3 reads the standard, phases, price, and wallet eligibility.</div></div></div>
+<div class="guide-step"><div class="guide-step-num">4</div><div class="guide-step-body"><div class="guide-step-title">Create a mint task</div><div class="guide-step-desc">Add the detected drop to Drops, then click Mint. Select phase, wallets, gas preset, and route. RV3 simulates the transaction before broadcast — if it would revert, no gas is spent.</div></div></div>
+<div class="guide-step"><div class="guide-step-num">5</div><div class="guide-step-body"><div class="guide-step-title">Monitor execution</div><div class="guide-step-desc">Tasks appear in the Tasks page with live status. Confirmation speed (ms) is displayed after each run. The sidebar notification panel logs results in real time.</div></div></div>`
     },
     {
-      icon:'◎',
-      title:'Contract Detector',
-      body:`<h4>Supported standards</h4>
+      icon: '◎',
+      title: 'Contract Detector',
+      body: `<h4>Supported standards</h4>
 <ul>
-  <li><strong>SeaDrop</strong> — OpenSea's native drop standard. Calldata fetched per wallet at preflight. Wallet eligibility checked automatically.</li>
-  <li><strong>ERC-721A</strong> — Azuki's gas-optimised batch mint standard. Works with Magic Eden, Blur, Kingdomly, Hyperlaunch.</li>
-  <li><strong>ERC-721C</strong> — Creator-royalty-enforcing standard used on OpenSea.</li>
-  <li><strong>Manifold</strong> — Manifold Studio extension contracts. Free mints common.</li>
-  <li><strong>Thirdweb</strong> — SDK-based drops using <code>claim()</code> function.</li>
-  <li><strong>Custom <code>mint()</code></strong> — RV3 fingerprints the ABI to find the mint function automatically.</li>
+  <li><strong>SeaDrop</strong> — OpenSea native drop standard. Calldata is fetched per wallet at preflight. Wallet eligibility is checked automatically.</li>
+  <li><strong>ERC-721A</strong> — Azuki batch mint standard. Supported across Magic Eden, Blur, Kingdomly, and Hyperlaunch.</li>
+  <li><strong>ERC-721C</strong> — Creator royalty enforcement standard on OpenSea.</li>
+  <li><strong>Manifold</strong> — Manifold Studio extension contracts. Free mints are common.</li>
+  <li><strong>Thirdweb</strong> — SDK drops using the <code>claim()</code> function.</li>
+  <li><strong>Custom</strong> — RV3 fingerprints the ABI to locate the mint function automatically.</li>
 </ul>
-<h4>How to use</h4>
-<p>Paste a contract address or URL. RV3 reads the standard, phases, price, and supply. Click <strong>"Add to Drops"</strong> to track it and mint from the Drops page.</p>
-<h4>Connecting APIs for full data</h4>
-<p>Without API keys, RV3 performs heuristic detection. For verified supply, real-time floor, and wallet eligibility: connect Alchemy and Etherscan API keys in Settings.</p>`
+<h4>Usage</h4>
+<p>Paste a contract address or URL. RV3 returns the standard, phase schedule, price per wallet, and supply. Click <strong>Add to Drops</strong> to track it. Eligibility checking runs automatically for connected wallets.</p>
+<h4>API keys</h4>
+<p>Without API keys, RV3 uses heuristic detection. For verified supply, live floor price, and per-wallet eligibility, add an OpenSea API key and Etherscan API key in your <code>.env</code> file.</p>`
     },
     {
-      icon:'◫',
-      title:'Wallets',
-      body:`<h4>Adding wallets</h4>
-<p>Click Import, paste your private key. RV3 stores only an address hint. The raw key is never saved. Keys clear on tab close.</p>
-<h4>Balance management</h4>
-<p>Set a threshold in Settings (e.g. 0.01 ETH). Wallets below it show amber and trigger a notification.</p>
-<h4>Fund Wallets wizard</h4>
+      icon: '◫',
+      title: 'Wallets',
+      body: `<h4>Importing</h4>
+<p>Wallets → Import. Enter a label and private key. The key is encrypted with <code>WALLET_ENCRYPTION_KEY</code> and stored server-side. Only the address is ever shown in the browser.</p>
+<h4>Balance alerts</h4>
+<p>Set a threshold in Settings (e.g. 0.01 ETH). Wallets below it appear with an amber indicator and trigger a notification. Refresh balances any time from the Wallets page.</p>
+<h4>Fund Wallets</h4>
 <ul>
-  <li><strong>Distribute</strong> — Send ETH from one hub wallet to multiple recipients (up to 50).</li>
-  <li><strong>Consolidate</strong> — Sweep ETH from multiple wallets into one hub wallet.</li>
-  <li><strong>Split gas</strong> — Auto-calculates and evenly splits the hub's balance across all mint wallets (reserves 2% for gas).</li>
-  <li><strong>One-click fund</strong> — Instantly queues a split operation across all wallets.</li>
+  <li><strong>Distribute</strong> — Send a fixed ETH amount from one hub wallet to multiple recipients.</li>
+  <li><strong>Split gas</strong> — Divide the hub balance evenly across all wallets. Reserves 2% for gas.</li>
+  <li><strong>Consolidate</strong> — Pull ETH from multiple wallets back into one hub.</li>
 </ul>
 <h4>NFT Sweep</h4>
-<p>Move NFTs from mint wallets into one hub. Filter by collection if needed. Each source wallet pays its own gas.</p>`
+<p>Transfers NFTs from mint wallets into a single hub address. Filter by collection slug. Each source wallet pays its own transfer gas.</p>`
     },
     {
-      icon:'⚡',
-      title:'Mint Tasks',
-      body:`<h4>Creating a task</h4>
-<p>Select the drop and phase, pick your mint wallets, set quantity per wallet, choose gas preset, and select an inclusion route. The gas calculator shows ETH and USD cost before you submit.</p>
+      icon: '◈',
+      title: 'Mint Tasks',
+      body: `<h4>Task creation</h4>
+<p>Select a drop and phase, choose wallets, set quantity per wallet, pick a gas preset, and choose an inclusion route. The cost calculator shows ETH and USD totals before you confirm.</p>
+<h4>Transaction simulation</h4>
+<p>Before broadcasting, RV3 runs <code>eth_call</code> against your RPC. If the contract would revert, the error reason is shown and no gas is spent. This protects against minting into a closed phase, a full collection, or an ineligible wallet.</p>
 <h4>Gas presets</h4>
 <ul>
-  <li><strong>Slow</strong> — 3 gwei. Low congestion, no time pressure.</li>
+  <li><strong>Slow</strong> — 3 gwei. Low-congestion mints with no time pressure.</li>
   <li><strong>Normal</strong> — 7 gwei. Standard for most public mints.</li>
   <li><strong>Fast</strong> — 15 gwei. Competitive public mints.</li>
   <li><strong>Turbo</strong> — 25 gwei. High-demand FCFS drops.</li>
-  <li><strong>Custom</strong> — Set your own gwei value.</li>
-  <li><strong>Custom</strong> — Enter any gwei value. ETH and USD costs auto-calculate.</li>
+  <li><strong>Custom</strong> — Enter any gwei value. ETH and USD costs update live.</li>
 </ul>
+<h4>Live gas display</h4>
+<p>The topbar shows the current network gas price in gwei and the estimated USD cost per mint transaction, updated every 5 seconds from your primary RPC.</p>
+<h4>Auto-scheduler</h4>
+<p>Enable <strong>Auto-schedule to phase start</strong> in the task modal. RV3 reads the phase open timestamp and fires the task at T-1ms. A live countdown with millisecond precision runs in the modal and on the Tasks page.</p>
+<h4>RPC blast</h4>
+<p>Enabled by default. The transaction is signed once and broadcast to every configured endpoint at the same instant. First confirmation wins. Adding more endpoints increases the probability of landing in a competitive block.</p>
 <h4>Inclusion routes</h4>
 <ul>
-  <li><strong>Direct RPC</strong> — Signs once, blasts to all your RPC endpoints in parallel. No MEV protection but fastest for most mints.</li>
+  <li><strong>Direct RPC</strong> — Blast to all endpoints. Fastest for most mints.</li>
   <li><strong>Public mempool</strong> — Standard broadcast. No privacy.</li>
   <li><strong>Flashbots Protect</strong> — Private relay via <code>ETH_RPC_PRIVATE</code>. Sandwich-resistant.</li>
-  <li><strong>Flashbots bundle</strong> — Private bundle targeting a specific block. Requires <code>FLASHBOTS_AUTH_PRIVATE_KEY</code>.</li>
-  <li><strong>Delegation batch</strong> — One transaction mints for all wallets via your executor contract. Requires Delegation setup.</li>
+  <li><strong>Flashbots bundle</strong> — Targets a specific block. Requires <code>FLASHBOTS_AUTH_PRIVATE_KEY</code>.</li>
+  <li><strong>Delegation batch</strong> — One transaction mints for all wallets via your executor contract.</li>
 </ul>
-<h4>Auto-scheduling</h4>
-<p>Enable "Auto-schedule to phase start" in the task modal. RV3 detects the phase open timestamp and schedules execution to fire at <strong>T-1ms</strong> (the last millisecond before the phase opens). A live countdown shows time remaining.</p>
-<h4>RPC blast</h4>
-<p>When enabled, the transaction is signed once and broadcast to every configured RPC endpoint at the exact same millisecond. First confirmation wins. More endpoints means higher chance of landing the block.</p>`
+<h4>Mint speed</h4>
+<p>Confirmation time in milliseconds is tracked per transaction and averaged across wallets in each run. Visible on the Tasks page, History, and the Overview stats card.</p>`
     },
     {
-      icon:'◈',
-      title:'Delegation',
-      body:`<h4>What delegation does</h4>
-<p>Your executor contract batches multiple mints in one transaction for <code>mintSigned</code> OpenSea drops. The operator wallet pays all mint costs and gas; NFTs land directly on each task wallet.</p>
-<h4>When to use it</h4>
-<p>Use delegation for SeaDrop drops to mint across many wallets in one transaction. For <code>mintPublic</code> drops where your executor is not on the payer allowlist, RV3 falls back to individual wallet-signed mints automatically.</p>
+      icon: '⬡',
+      title: 'Delegation',
+      body: `<h4>How it works</h4>
+<p>Your executor contract batches multiple mints into one transaction for <code>mintSigned</code> OpenSea drops. The operator wallet pays all costs; NFTs arrive on each individual task wallet.</p>
+<h4>When to use</h4>
+<p>Use for SeaDrop drops when minting across many wallets. For <code>mintPublic</code> drops where your executor is not on the payer allowlist, RV3 falls back to individual wallet-signed mints automatically.</p>
 <h4>Setup</h4>
 <ol style="padding-left:18px">
-  <li style="margin-bottom:4px">Go to Delegation, choose your operator wallet</li>
-  <li style="margin-bottom:4px">Fund the operator with: mint cost × number of wallets + gas</li>
-  <li>Click Deploy contract. Your VPS worker handles deployment.</li>
+  <li style="margin-bottom:6px">Delegation → choose your operator wallet</li>
+  <li style="margin-bottom:6px">Fund operator with: (mint price × wallet count) + gas</li>
+  <li>Deploy contract — the worker handles deployment and confirms the address</li>
 </ol>`
     },
     {
-      icon:'📈',
-      title:'PnL Tracking',
-      body:`<h4>What's tracked</h4>
-<p>RV3 logs gas cost in USD per run. PnL shows total minted, gas spent, and average cost per NFT.</p>
-<h4>Floor price tracking</h4>
-<p>Connect OpenSea or Blur API keys in Settings for live floor and PnL per collection.</p>
-<h4>Improving your PnL</h4>
+      icon: '◑',
+      title: 'PnL',
+      body: `<h4>What is tracked</h4>
+<p>Every mint run logs gas cost in ETH and USD, number of NFTs minted, and the route used. PnL aggregates these by collection and shows total gas spent and average cost per NFT.</p>
+<h4>Floor price</h4>
+<p>Connect an OpenSea or Blur API key in <code>.env</code> for live floor price data and estimated PnL per collection.</p>
+<h4>Reducing gas spend</h4>
 <ul>
-  <li>Use Direct RPC + RPC blast for lowest latency (avoid failed transactions).</li>
-  <li>Set a custom gas that matches network conditions. Overpaying gwei erodes PnL.</li>
-  <li>Use Delegation batch for SeaDrop mints to reduce total gas spent.</li>
-  <li>Monitor the notification panel for failed runs and retry quickly.</li>
+  <li>Use Direct RPC + blast for the lowest latency. Fewer failed transactions means less wasted gas.</li>
+  <li>Transaction simulation catches reverts before broadcast — no gas is spent on failed mints.</li>
+  <li>Match your gas preset to current network conditions. The topbar gas pill shows live gwei.</li>
+  <li>Use Delegation batch for SeaDrop mints to consolidate per-wallet gas into one transaction.</li>
 </ul>`
     },
     {
-      icon:'🔔',
-      title:'Notifications',
-      body:`<h4>Notification panel</h4>
-<p>The notification panel sits at the bottom of the sidebar. It shows mint results, fund ops, low balance alerts, and update notifications.</p>
-<h4>Notification types</h4>
+      icon: '◌',
+      title: 'Notifications',
+      body: `<h4>In-app panel</h4>
+<p>The notification panel is at the bottom of the sidebar. Click to expand. It logs mint results, fund operations, balance warnings, and system events in real time.</p>
+<h4>Types</h4>
 <ul>
-  <li><span style="color:var(--green)">● OK</span> — Mint completed successfully, fund operation done</li>
-  <li><span style="color:var(--red)">● FAIL</span> — Mint failed, transaction reverted</li>
-  <li><span style="color:var(--blue)">● INFO</span> — Operation queued, balance warning</li>
-  <li><span style="color:var(--accent3)">● NEW</span> — RV3 update / changelog entry</li>
+  <li><span style="color:var(--green)">●</span> <strong>OK</strong> — Mint confirmed, fund op complete</li>
+  <li><span style="color:var(--red)">●</span> <strong>Fail</strong> — Transaction reverted or mint failed</li>
+  <li><span style="color:var(--blue)">●</span> <strong>Info</strong> — Task queued, wallet balance warning</li>
 </ul>
 <h4>External alerts</h4>
-<p>Set Discord webhook or Telegram bot in Settings. The VPS worker sends alerts when mints complete or fail.</p>`
+<p>Set <code>DISCORD_WEBHOOK_URL</code> or <code>TELEGRAM_BOT_TOKEN</code> + <code>TELEGRAM_CHAT_ID</code> in your <code>.env</code>. The worker sends an alert when each mint run completes or fails. Use <strong>Send test notification</strong> in Settings to confirm it is working.</p>`
     },
     {
-      icon:'🔐',
-      title:'Security',
-      body:`<h4>Key storage</h4>
-<p>Private keys are never persisted. RV3 stores only an address hint in session storage, never the raw key. Always use a dedicated minting wallet, not your main wallet.</p>
-<h4>Built-in protections</h4>
+      icon: '◻',
+      title: 'Security',
+      body: `<h4>Key handling</h4>
+<p>Private keys are encrypted with AES-256 using <code>WALLET_ENCRYPTION_KEY</code> and stored server-side only. The browser never receives a raw key. Always use dedicated minting wallets, never your main wallet.</p>
+<h4>Auth</h4>
+<p>Sessions are stored in Neon PostgreSQL (production) or a local JSON file (development). Passwords are hashed with SHA-256 + API secret. Sessions expire after 7 days and are purged on logout.</p>
+<h4>Protections</h4>
 <ul>
-  <li>XSS prevention: all user input sanitized via <code>esc()</code> before rendering</li>
+  <li>All user input is sanitized before rendering — XSS is not possible through form fields or URL params</li>
+  <li>HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, and Permissions-Policy headers on every response</li>
   <li>Content Security Policy blocks external script injection</li>
-  <li>No <code>eval()</code> or dynamic code execution anywhere in the codebase</li>
-  <li>URL validation on RPC endpoints</li>
-  <li>Max spend cap enforced on submission. Blocks if estimated cost exceeds limit.</li>
-  <li>Input sanitization on all numeric fields (<code>sanitizeNum</code>, <code>sanitizeInt</code>)</li>
-  <li>Fetch timeouts (5s)</li>
+  <li>Transaction simulation before broadcast — reverts are caught before gas is spent</li>
+  <li>Max spend cap enforced at task creation — submission is blocked if estimated cost exceeds limit</li>
+  <li>Rate limit on task creation (configurable via <code>TASK_RATE_LIMIT_PER_MIN</code>)</li>
+  <li>All RPC URLs validated as HTTPS before use</li>
+  <li>Fetch timeouts on all outbound requests</li>
 </ul>
 <h4>Best practices</h4>
 <ul>
-  <li>Run RV3 on your own server. Never share the URL.</li>
-  <li>Rotate private keys regularly</li>
-  <li>Set a max spend cap before every session</li>
-  <li>Monitor the notification panel</li>
+  <li>Never share your RV3 URL with anyone</li>
+  <li>Set a strong <code>API_SECRET</code> and <code>WALLET_ENCRYPTION_KEY</code> in production</li>
+  <li>Set a max spend cap before each session</li>
+  <li>Use a dedicated minting wallet, not a wallet that holds long-term assets</li>
+</ul>`
+    },
+    {
+      icon: '⊞',
+      title: 'Environment Variables',
+      body: `<h4>Required</h4>
+<ul>
+  <li><code>API_SECRET</code> — Password salt and API auth token. Must match across all environments.</li>
+  <li><code>DATABASE_URL</code> — Neon PostgreSQL connection string. Required on Vercel for persistent auth.</li>
+  <li><code>ETH_RPC_PRIMARY</code> — Primary RPC endpoint (Alchemy, QuickNode, etc.). Required to execute transactions.</li>
+  <li><code>WALLET_ENCRYPTION_KEY</code> — 64-character hex string. Used to encrypt private keys at rest.</li>
+</ul>
+<h4>Optional</h4>
+<ul>
+  <li><code>ETH_RPC_BLAST_1/2/3</code> — Additional endpoints for RPC blast mode.</li>
+  <li><code>ETH_RPC_PRIVATE</code> — Private relay (Flashbots Protect). Used with the Flashbots route.</li>
+  <li><code>OPENSEA_API_KEY</code> — Enables live drop detection, wallet eligibility, and NFT sweep.</li>
+  <li><code>ETHERSCAN_API_KEY</code> — Enables ABI verification and on-chain supply data.</li>
+  <li><code>DISCORD_WEBHOOK_URL</code> — Sends mint alerts to a Discord channel.</li>
+  <li><code>TELEGRAM_BOT_TOKEN</code> + <code>TELEGRAM_CHAT_ID</code> — Sends mint alerts via Telegram.</li>
+  <li><code>ENABLE_LIVE_MINT</code> — Set to <code>true</code> to enable real transaction execution. Default is preflight only.</li>
+  <li><code>TASK_RATE_LIMIT_PER_MIN</code> — Max tasks per minute. Default: 10.</li>
 </ul>`
     },
   ];
@@ -2961,7 +2990,7 @@ function renderGuide() {
   <div class="guide-hd" onclick="openChangelog()" style="background:rgba(74,124,252,.05);cursor:pointer">
     <span class="g-icon">🆕</span>
     <h3>What's New</h3>
-    <span style="font-size:10px;color:var(--accent3);font-weight:700">LATEST: v1.5.0</span>
+    <span style="font-size:10px;color:var(--accent3);font-weight:700">LATEST: v2.0.0</span>
     <span style="font-size:11px;color:var(--accent3);margin-left:auto;font-weight:500">View changelog ↗</span>
   </div>
 </div>
