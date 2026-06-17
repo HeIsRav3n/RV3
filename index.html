@@ -1828,7 +1828,8 @@ async function rpcPing(id) {
   try {
     let ms;
     if (API_ONLINE) {
-      const r = await RV3_API.pingRpc(isEnv ? null : url, isEnv ? id : null);
+      const pingUrl = isEnv ? (rpcEntry.urlFull || null) : url;
+      const r = await RV3_API.pingRpc(pingUrl, isEnv ? id : null);
       ms = r.ms;
     } else {
       const start = Date.now();

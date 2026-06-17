@@ -137,9 +137,12 @@ router.post('/detect/eligibility', async (req, res) => {
 router.get('/rpc/env', (req, res) => {
   res.json({
     rpcs: config.envRpcs.map(r => ({
-      ...r,
+      id: r.id,
+      name: r.name || r.id,
+      role: r.role,
       url: rpc.maskUrl(r.url),
-      urlFull: undefined,
+      urlFull: r.url,
+      fromEnv: true,
     })),
   });
 });
@@ -147,13 +150,17 @@ router.get('/rpc/env', (req, res) => {
 router.post('/rpc/ping', async (req, res) => {
   try {
     const id = String(req.body?.id || '').trim();
+    const fallbackUrl = String(req.body?.url || '').trim();
+
     if (id) {
       const envRpc = config.envRpcs.find(r => r.id === id);
-      if (!envRpc) return res.status(404).json({ error: 'Env RPC not found' });
-      const ms = await rpc.ping(envRpc.url);
+      const pingUrl = envRpc?.url || (fallbackUrl.startsWith('https://') ? fallbackUrl : null);
+      if (!pingUrl) return res.status(404).json({ error: 'RPC not found — set ETH_RPC_PRIMARY in env vars' });
+      const ms = await rpc.ping(pingUrl);
       return res.json({ ms, ok: true });
     }
-    const url = String(req.body?.url || '').trim();
+
+    const url = fallbackUrl;
     if (!url.startsWith('https://')) return res.status(400).json({ error: 'HTTPS URL required' });
     const ms = await rpc.ping(url);
     res.json({ ms, ok: true });

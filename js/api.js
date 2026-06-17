@@ -69,7 +69,9 @@ const RV3_API = {
   },
 
   async pingRpc(url, id) {
-    const body = id ? { id } : { url };
+    const body = {};
+    if (id) body.id = id;
+    if (url) body.url = url;
     return this.request('/rpc/ping', { method: 'POST', body: JSON.stringify(body) });
   },
 
