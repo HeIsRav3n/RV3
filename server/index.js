@@ -34,7 +34,7 @@ app.use('/api', authRequired, auth, apiRoutes);
 
 app.use(express.static(root, { index: 'index.html' }));
 
-app.get('*', (req, res) => {
+app.use((req, res) => {
   res.sendFile(path.join(root, 'index.html'));
 });
 
