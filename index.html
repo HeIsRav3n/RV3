@@ -25,10 +25,23 @@ html,body{height:100vh;overflow:hidden}
 body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;display:flex}
 
 /* SIDEBAR */
-#sidebar{width:214px;min-width:214px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;user-select:none}
-.logo-wrap{padding:13px 14px 11px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+#sidebar{width:214px;min-width:214px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;user-select:none;transition:width .18s ease,min-width .18s ease}
+#sidebar.collapsed{width:50px;min-width:50px}
+#sidebar.collapsed .logo-name,#sidebar.collapsed .logo-sub,#sidebar.collapsed .ns,#sidebar.collapsed .ni-label,#sidebar.collapsed .ni-b,#sidebar.collapsed .sb-status-label,#sidebar.collapsed .notif-section{display:none!important}
+#sidebar.collapsed .logo-wrap{justify-content:center;padding:10px 8px}
+#sidebar.collapsed .logo-name-wrap{display:none}
+#sidebar.collapsed .ni{justify-content:center;padding:7px;gap:0}
+#sidebar.collapsed .ni svg{opacity:.8}
+#sidebar.collapsed .sb-logout span{display:none}
+#sidebar.collapsed .sb-foot{padding:6px 8px}
+#sidebar.collapsed .sb-status-row{justify-content:center}
+.sb-toggle{background:none;border:none;cursor:pointer;color:var(--text3);padding:3px;display:flex;align-items:center;border-radius:4px;transition:color .12s;margin-left:auto;flex-shrink:0}
+.sb-toggle:hover{color:var(--text)}
+#sidebar.collapsed .sb-toggle{margin:auto}
+.logo-wrap{padding:11px 12px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
 .logo-img-wrap{flex-shrink:0;width:34px;height:34px;border-radius:8px;overflow:hidden;border:1px solid var(--border2)}
 .logo-img-wrap img{width:100%;height:100%;object-fit:cover;object-position:left top;display:block}
+.logo-name-wrap{flex:1;min-width:0}
 .logo-name{font-size:16px;font-weight:800;letter-spacing:-.5px;line-height:1}
 .logo-sub{font-size:9px;color:var(--text3);letter-spacing:.8px;margin-top:1px;text-transform:uppercase}
 .nav{padding:8px 8px;flex:1;overflow-y:auto}
@@ -44,6 +57,9 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 .nb-a{background:rgba(74,124,252,.18);color:var(--accent3)}
 .nb-g{background:rgba(15,207,133,.15);color:var(--green)}
 .sb-foot{padding:9px 12px;border-top:1px solid var(--border)}
+.sb-logout{display:flex;align-items:center;gap:7px;cursor:pointer;color:var(--text3);padding:5px 0;font-size:10.5px;transition:color .12s;border-top:1px solid var(--border);margin-top:6px;padding-top:7px}
+.sb-logout:hover{color:var(--red)}
+.sb-status-row{display:flex;align-items:center;gap:7px}
 .sr{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--text2);padding:2px 0}
 .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 .dg{background:var(--green)}
@@ -475,71 +491,74 @@ code{background:var(--bg4);padding:1px 5px;border-radius:4px;font-size:11px;font
     <div class="logo-img-wrap">
       <img src="/assets/rv3-logo.png" width="34" height="34" alt="RV3 logo">
     </div>
-    <div>
+    <div class="logo-name-wrap">
       <div class="logo-name">RV3</div>
       <div class="logo-sub">Mint Bot</div>
     </div>
+    <button class="sb-toggle" id="sb-toggle" onclick="toggleSidebar()" title="Collapse sidebar" aria-label="Toggle sidebar">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
   </div>
   <div class="nav">
     <div class="ns">Core</div>
-    <div class="ni act" id="nav-overview" onclick="go('overview')" role="button" aria-current="page">
+    <div class="ni act" id="nav-overview" onclick="go('overview')" role="button" aria-current="page" title="Overview">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-      Overview
+      <span class="ni-label">Overview</span>
     </div>
-    <div class="ni" id="nav-detector" onclick="go('detector')" role="button">
+    <div class="ni" id="nav-detector" onclick="go('detector')" role="button" title="Detector">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><circle cx="11" cy="11" r="3"/></svg>
-      Detector
+      <span class="ni-label">Detector</span>
     </div>
-    <div class="ni" id="nav-wallets" onclick="go('wallets')" role="button">
+    <div class="ni" id="nav-wallets" onclick="go('wallets')" role="button" title="Wallets">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><circle cx="16" cy="15" r="1" fill="currentColor"/></svg>
-      Wallets
+      <span class="ni-label">Wallets</span>
       <span class="ni-b nb-g" id="nb-wallets">0</span>
     </div>
-    <div class="ni" id="nav-drops" onclick="go('drops')" role="button">
+    <div class="ni" id="nav-drops" onclick="go('drops')" role="button" title="Drops">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-      Drops
+      <span class="ni-label">Drops</span>
       <span class="ni-b nb-g" id="nb-drops">0</span>
     </div>
     <div class="ns">Execute</div>
-    <div class="ni" id="nav-tasks" onclick="go('tasks')" role="button">
+    <div class="ni" id="nav-tasks" onclick="go('tasks')" role="button" title="Tasks">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5,3 19,12 5,21"/></svg>
-      Tasks
+      <span class="ni-label">Tasks</span>
       <span class="ni-b nb-g" id="nb-tasks" style="display:none">0</span>
     </div>
-    <div class="ni" id="nav-fund" onclick="go('fund')" role="button">
+    <div class="ni" id="nav-fund" onclick="go('fund')" role="button" title="Fund Wallets">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-      Fund Wallets
+      <span class="ni-label">Fund Wallets</span>
     </div>
-    <div class="ni" id="nav-sweep" onclick="go('sweep')" role="button">
+    <div class="ni" id="nav-sweep" onclick="go('sweep')" role="button" title="NFT Sweep">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 17.5h7"/><path d="M17.5 14v7"/></svg>
-      NFT Sweep
+      <span class="ni-label">NFT Sweep</span>
     </div>
-    <div class="ni" id="nav-deleg" onclick="go('deleg')" role="button">
+    <div class="ni" id="nav-deleg" onclick="go('deleg')" role="button" title="Delegation">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      Delegation
+      <span class="ni-label">Delegation</span>
     </div>
-    <div class="ni" id="nav-history" onclick="go('history')" role="button">
+    <div class="ni" id="nav-history" onclick="go('history')" role="button" title="History">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      History
+      <span class="ni-label">History</span>
     </div>
     <div class="ns">Analytics</div>
-    <div class="ni" id="nav-pnl" onclick="go('pnl')" role="button">
+    <div class="ni" id="nav-pnl" onclick="go('pnl')" role="button" title="PnL">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
-      PnL
+      <span class="ni-label">PnL</span>
     </div>
     <div class="ns">Config</div>
-    <div class="ni" id="nav-settings" onclick="go('settings')" role="button">
+    <div class="ni" id="nav-settings" onclick="go('settings')" role="button" title="Settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      Settings
+      <span class="ni-label">Settings</span>
     </div>
-    <div class="ni" id="nav-guide" onclick="go('guide')" role="button">
+    <div class="ni" id="nav-guide" onclick="go('guide')" role="button" title="User Guide">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-      User Guide
+      <span class="ni-label">User Guide</span>
     </div>
   </div>
   <div class="sb-foot">
     <!-- NOTIFICATION PANEL TOGGLE -->
-    <div style="border-bottom:1px solid var(--border);margin-bottom:8px;padding-bottom:8px">
+    <div class="notif-section" style="border-bottom:1px solid var(--border);margin-bottom:8px;padding-bottom:8px">
       <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleNotifPanel()" id="notif-toggle">
         <div style="display:flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;color:var(--text2)">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -557,9 +576,13 @@ code{background:var(--bg4);padding:1px 5px;border-radius:4px;font-size:11px;font
         </div>
       </div>
     </div>
-    <div class="sr"><div class="dot dg" id="sys-worker"></div><span id="sys-worker-lbl">Worker: checking...</span></div>
-    <div class="sr"><div class="dot dg" id="sys-store"></div><span>Store: file-based</span></div>
-    <div class="sr"><div class="dot dg" id="sys-rpc"></div><span id="sys-rpc-lbl">RPC: 0 endpoints</span></div>
+    <div class="sr sb-status-row"><div class="dot dg" id="sys-worker"></div><span class="sb-status-label" id="sys-worker-lbl">Worker: checking...</span></div>
+    <div class="sr sb-status-row"><div class="dot dg" id="sys-store"></div><span class="sb-status-label">Store: file-based</span></div>
+    <div class="sr sb-status-row"><div class="dot dg" id="sys-rpc"></div><span class="sb-status-label" id="sys-rpc-lbl">RPC: 0 endpoints</span></div>
+    <div class="sb-logout" onclick="handleLogout()" title="Sign out">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      <span>Sign out</span>
+    </div>
   </div>
 </nav>
 
@@ -838,12 +861,41 @@ const GAS_PRESETS = { slow: 15, normal: 25, fast: 40, turbo: 80 };
 function saveState() {
   try {
     sessionStorage.setItem('rv3_state', JSON.stringify({
-      wallets: S.wallets, drops: S.drops, tasks: S.tasks,
-      history: S.history, rpcs: S.rpcs, settings: S.settings
+      wallets: S.wallets, drops: S.drops, tasks: S.tasks, history: S.history,
     }));
   } catch(e) { /* quota or private mode */ }
+  // RPCs and settings persist across sessions in localStorage
+  try { localStorage.setItem('rv3_rpcs', JSON.stringify(S.rpcs)); } catch {}
+  try { localStorage.setItem('rv3_settings', JSON.stringify(S.settings)); } catch {}
 }
 function loadState() {
+  // Load RPCs from localStorage first (survives tab close)
+  try {
+    const raw = localStorage.getItem('rv3_rpcs');
+    if (raw) {
+      const d = JSON.parse(raw);
+      if (Array.isArray(d)) S.rpcs = d.slice(0,50).filter(r => r && typeof r.id === 'string' && isHttpsUrl(r.url)).map(r => ({
+        id: clip(r.id,64), name: clip(r.name,40), role: ['Primary','Blast','Private'].includes(r.role)?r.role:'Private',
+        url: r.url, ms: r.ms==null?null:sanitizeInt(r.ms,0,60000), active: r.active!==false
+      }));
+    }
+  } catch {}
+  // Load settings from localStorage
+  try {
+    const raw = localStorage.getItem('rv3_settings');
+    if (raw) {
+      const s = JSON.parse(raw);
+      if (s && typeof s === 'object') S.settings = Object.assign({}, S.settings, {
+        defaultRoute: ['direct_rpc','public_mempool','flashbots_protect','flashbots_bundle','delegation_batch'].includes(s.defaultRoute)?s.defaultRoute:S.settings.defaultRoute,
+        maxSpendEth: clip(s.maxSpendEth,20), lowBalanceAlert: clip(s.lowBalanceAlert,20),
+        defaultGasPreset: ['slow','normal','fast','turbo','custom'].includes(s.defaultGasPreset)?s.defaultGasPreset:S.settings.defaultGasPreset,
+        rpcBlast: !!s.rpcBlast, rpcPrewarm: !!s.rpcPrewarm,
+        discordWebhook: isHttpsUrl(s.discordWebhook)?clip(s.discordWebhook,300):'',
+        telegramToken: clip(s.telegramToken,120), telegramChatId: clip(s.telegramChatId,30),
+        notifyMintRun: s.notifyMintRun!==false, notifyFundTransfer: s.notifyFundTransfer!==false, notifyLowBalance: s.notifyLowBalance!==false
+      });
+    }
+  } catch {}
   try {
     const raw = sessionStorage.getItem('rv3_state');
     if(!raw || raw.length > 500000) return;
@@ -880,22 +932,7 @@ function loadState() {
       wallets: sanitizeInt(t.wallets, 0, 200), rpcCount: sanitizeInt(t.rpcCount, 0, 50)
     }));
     if(Array.isArray(d.history)) S.history = d.history.slice(0, 500);
-    if(Array.isArray(d.rpcs)) S.rpcs = d.rpcs.slice(0, 50).filter(r => r && typeof r.id === 'string' && isHttpsUrl(r.url)).map(r => ({
-      id: clip(r.id, 64), name: clip(r.name, 40), role: ['Primary','Blast','Private'].includes(r.role) ? r.role : 'Private',
-      url: r.url, ms: r.ms == null ? null : sanitizeInt(r.ms, 0, 60000), active: r.active !== false
-    }));
-    if(d.settings && typeof d.settings === 'object') {
-      const s = d.settings;
-      S.settings = Object.assign({}, S.settings, {
-        defaultRoute: ['direct_rpc','public_mempool','flashbots_protect','flashbots_bundle','delegation_batch'].includes(s.defaultRoute) ? s.defaultRoute : S.settings.defaultRoute,
-        maxSpendEth: clip(s.maxSpendEth, 20), lowBalanceAlert: clip(s.lowBalanceAlert, 20),
-        defaultGasPreset: ['slow','normal','fast','turbo','custom'].includes(s.defaultGasPreset) ? s.defaultGasPreset : S.settings.defaultGasPreset,
-        rpcBlast: !!s.rpcBlast, rpcPrewarm: !!s.rpcPrewarm,
-        discordWebhook: isHttpsUrl(s.discordWebhook) ? clip(s.discordWebhook, 300) : '',
-        telegramToken: clip(s.telegramToken, 120), telegramChatId: clip(s.telegramChatId, 30),
-        notifyMintRun: !!s.notifyMintRun, notifyFundTransfer: !!s.notifyFundTransfer, notifyLowBalance: !!s.notifyLowBalance
-      });
-    }
+    // rpcs and settings now come from localStorage (loaded above), not sessionStorage
   } catch(e) { sessionStorage.removeItem('rv3_state'); }
 }
 
@@ -1624,8 +1661,12 @@ async function apiReconnect() {
 }
 
 async function handleLogout() {
-  if (!confirm('Log out? You will need to sign in again.')) return;
+  if (!confirm('Sign out? You will need to sign in again.')) return;
   await RV3_Auth.logout();
+  API_ONLINE = false;
+  // Clear session state (keep RPCs/settings in localStorage)
+  sessionStorage.removeItem('rv3_state');
+  S.wallets = []; S.drops = []; S.tasks = []; S.history = [];
   document.getElementById('loginPage').style.display = 'flex';
   document.getElementById('sidebar').style.display = 'none';
   document.getElementById('main').style.display = 'none';
@@ -1703,13 +1744,15 @@ function settingsSave() {
 }
 
 function rpcRowHTML(r) {
-  return `<div class="rpc-row">
-    <div class="rpc-fire${r.active?' active':''}"></div>
+  const msColor = !r.ms ? '' : r.ms < 200 ? 'color:var(--green)' : r.ms < 600 ? 'color:var(--amber)' : 'color:var(--red)';
+  const msLabel = r.pinging ? '<span class="spin" style="font-size:11px">⟳</span>' : r.ms ? r.ms+'ms' : r.err ? '<span style="color:var(--red)">err</span>' : '—';
+  return `<div class="rpc-row" id="rpc-row-${esc(r.id)}">
+    <div class="rpc-fire${r.active&&!r.err?' active':''}${r.err?' error':''}"></div>
     <span class="rpc-name">${esc(r.name)}</span>
     <span class="rpc-role rr-${allowRpcRole(r.role)}">${esc(r.role||'Private')}</span>
     <span class="rpc-url">${esc(r.url)}</span>
-    <span class="rpc-ms${r.ms>20?' slow':''}">${r.ms?r.ms+'ms':'—'}</span>
-    <span style="cursor:pointer;color:var(--text3);padding:2px 4px;font-size:12px" onclick="rpcPing('${esc(r.id)}')" title="Test">◎</span>
+    <span class="rpc-ms" style="${msColor}">${msLabel}</span>
+    <span style="cursor:pointer;color:var(--text3);padding:2px 4px;font-size:12px" onclick="rpcPing('${esc(r.id)}')" title="Ping">◎</span>
     <span style="cursor:pointer;color:var(--red);padding:2px 4px;font-size:12px" onclick="rpcDelete('${esc(r.id)}')" title="Remove">✕</span>
   </div>`;
 }
@@ -1749,6 +1792,10 @@ async function rpcPing(id) {
   const url = rpcEntry.urlFull || rpcEntry.url;
   const isEnv = rpcEntry.fromEnv || String(id).startsWith('env_');
   if (!isEnv && !url.startsWith('https://')) { toast('Full HTTPS URL required to ping','⚠'); return; }
+  // Show pinging state immediately
+  rpcEntry.pinging = true; rpcEntry.err = false;
+  const list = document.getElementById('rpc-list');
+  if(list) list.innerHTML = S.rpcs.map(r=>rpcRowHTML(r)).join('');
   try {
     let ms;
     if (API_ONLINE) {
@@ -1756,25 +1803,34 @@ async function rpcPing(id) {
       ms = r.ms;
     } else {
       const start = Date.now();
-      const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1}), signal: AbortSignal.timeout(5000)});
-      await res.json();
+      const res = await fetch(url, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1}),
+        signal: AbortSignal.timeout(8000)
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message || 'RPC error');
       ms = Date.now() - start;
     }
-    rpcEntry.ms = ms;
+    rpcEntry.ms = ms; rpcEntry.pinging = false; rpcEntry.err = false;
     saveState();
-    const list = document.getElementById('rpc-list');
     if(list) list.innerHTML = S.rpcs.map(r=>rpcRowHTML(r)).join('');
-    toast(`${rpcEntry.name}: ${ms}ms`,'✓');
-  } catch {
-    rpcEntry.ms = null;
-    toast(`${rpcEntry.name}: unreachable`,'⚠');
+    const quality = ms < 200 ? '✓' : ms < 600 ? '⚠' : '⚠';
+    toast(`${rpcEntry.name}: ${ms}ms`, quality);
+  } catch(e) {
+    rpcEntry.ms = null; rpcEntry.pinging = false; rpcEntry.err = true;
+    saveState();
+    if(list) list.innerHTML = S.rpcs.map(r=>rpcRowHTML(r)).join('');
+    toast(`${rpcEntry.name}: ${e.message||'unreachable'}`, '⚠');
   }
 }
 
 function rpcBenchmark() {
   if(!S.rpcs.length) { toast('No RPC endpoints configured','⚠'); return; }
-  toast(`Benchmarking ${S.rpcs.length} endpoint${S.rpcs.length!==1?'s':''}...`,'⚡');
-  S.rpcs.forEach(r => rpcPing(r.id));
+  toast(`Pinging ${S.rpcs.length} endpoint${S.rpcs.length!==1?'s':''}…`, '⚡');
+  // Stagger pings 80ms apart to avoid hammering simultaneously
+  S.rpcs.forEach((r, i) => setTimeout(() => rpcPing(r.id), i * 80));
 }
 
 async function testNotify() {
@@ -2937,7 +2993,10 @@ async function handleRegister() {
 
 function showApp() {
   document.getElementById('loginPage').style.display = 'none';
-  document.getElementById('sidebar').style.display = 'flex';
+  const sb = document.getElementById('sidebar');
+  sb.style.display = 'flex';
+  // Restore collapsed state
+  if (localStorage.getItem('rv3_sb_collapsed') === '1') sb.classList.add('collapsed');
   document.getElementById('main').style.display = 'flex';
   loadState();
   go('overview');
@@ -2945,6 +3004,18 @@ function showApp() {
   updateBadges();
   fetchEthPrice();
   renderNotifPanel();
+  // (Re)connect API — needed after logout/login without page reload
+  apiConnect().then(async () => {
+    if (API_ONLINE) {
+      await syncEnvRpcs();
+      await syncFromServer();
+      try { await RV3_API.settingsStatus(); } catch {}
+      updateSystemStatus();
+      updateBadges();
+      const act = document.querySelector('.ni.act');
+      if (act) go(act.id.replace('nav-', ''));
+    }
+  }).catch(() => updateSystemStatus());
 }
 
 async function checkAuth() {
@@ -2972,44 +3043,49 @@ async function checkAuth() {
   }
 }
 
+// SIDEBAR COLLAPSE
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  sb.classList.toggle('collapsed');
+  localStorage.setItem('rv3_sb_collapsed', sb.classList.contains('collapsed') ? '1' : '0');
+}
+
 // BOOT
 document.addEventListener('DOMContentLoaded', async () => {
-  // Check authentication first
+  // Restore sidebar collapsed state before auth (avoids layout flash)
+  if (localStorage.getItem('rv3_sb_collapsed') === '1') {
+    document.getElementById('sidebar').classList.add('collapsed');
+  }
+
+  // Check authentication — showApp() handles API connect internally
   await checkAuth();
 
-  if (!RV3_API.token()) RV3_API.setToken('rv3_local_dev_change_this');
-
-  apiConnect().then(async () => {
-  if (API_ONLINE) {
-      await syncEnvRpcs();
-      await syncFromServer();
-      try { await RV3_API.settingsStatus(); } catch { /* */ }
-      addNotif('Backend online', 'Worker connected · edit .env for API keys', 'info');
-    } else {
-      addNotif('Backend offline', 'Run npm start in the RV3 folder', 'warn');
-    }
-    updateSystemStatus();
-    updateBadges();
-    fetchEthPrice();
-    renderNotifPanel();
-    
-    // Refresh current view if we are on a page that relies on API data
-    const act = document.querySelector('.ni.act');
-    if (act) {
-      const page = act.id.replace('nav-', '');
-      go(page);
-    }
-  }).catch(() => {
-    addNotif('Backend offline', 'Run npm start in the RV3 folder', 'warn');
-    updateSystemStatus();
-  });
+  // Periodic sync (tasks + wallets) and auto-reconnect if backend goes offline/online
   setInterval(async () => {
+    if (!RV3_Auth.isAuthenticated()) return;
+    const wasOnline = API_ONLINE;
+    try {
+      await RV3_API.health();
+      API_ONLINE = true;
+    } catch {
+      API_ONLINE = false;
+    }
     if (API_ONLINE) {
       await syncFromServer();
       updateSystemStatus();
       if (document.getElementById('nav-tasks')?.classList.contains('act')) go('tasks');
     }
+    if (!wasOnline && API_ONLINE) {
+      await syncEnvRpcs();
+      addNotif('Backend reconnected', 'Worker back online', 'info');
+      updateSystemStatus();
+    }
+    if (wasOnline && !API_ONLINE) {
+      addNotif('Backend offline', 'Run npm start in the RV3 folder', 'warn');
+      updateSystemStatus();
+    }
   }, 5000);
+
   // fire latest changelog notif
   const latest = CHANGELOG[0];
   if(latest) {
