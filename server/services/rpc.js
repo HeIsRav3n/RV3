@@ -31,7 +31,10 @@ async function getBalance(url, address) {
 function allRpcUrls(extra = []) {
   const urls = new Set();
   for (const r of config.envRpcs) urls.add(r.url);
-  for (const r of extra) if (r.url?.startsWith('https://')) urls.add(r.url);
+  for (const r of extra) {
+    const url = typeof r === 'string' ? r : r?.url;
+    if (url?.startsWith('https://')) urls.add(url);
+  }
   return [...urls];
 }
 

@@ -115,6 +115,7 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 .tb-721{background:rgba(15,207,133,.12);color:var(--green);border:1px solid rgba(15,207,133,.2)}
 .tb-mf{background:rgba(245,160,32,.12);color:var(--amber);border:1px solid rgba(245,160,32,.2)}
 .tb-tw{background:rgba(79,168,232,.12);color:var(--blue);border:1px solid rgba(79,168,232,.2)}
+.tb-1155{background:rgba(122,163,255,.12);color:var(--accent3);border:1px solid rgba(122,163,255,.25)}
 .tb-cx{background:rgba(240,64,64,.1);color:var(--red);border:1px solid rgba(240,64,64,.2)}
 
 /* STATUS */
@@ -497,7 +498,7 @@ code{background:var(--bg4);padding:1px 5px;border-radius:4px;font-size:11px;font
       </div>
     </div>
     <div class="sr"><div class="dot dg" id="sys-worker"></div><span id="sys-worker-lbl">Worker: checking...</span></div>
-    <div class="sr"><div class="dot dg" id="sys-redis"></div><span>Redis: OK</span></div>
+    <div class="sr"><div class="dot dg" id="sys-store"></div><span>Store: file-based</span></div>
     <div class="sr"><div class="dot dg" id="sys-rpc"></div><span id="sys-rpc-lbl">RPC: 0 endpoints</span></div>
   </div>
 </nav>
@@ -663,7 +664,7 @@ const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>
 const sanitizeAddr = s => /^0x[0-9a-fA-F]{40}$/.test(s) || (s.startsWith('0x') && s.includes('...') && s.length <= 20) ? s : '';
 const sanitizeNum = (v, min, max) => { const n = parseFloat(v); return isNaN(n) ? min : Math.min(Math.max(n, min), max); };
 const sanitizeInt = (v, min, max) => { const n = parseInt(v, 10); return isNaN(n) ? min : Math.min(Math.max(n, min), max); };
-const allowStdClass = c => ({ sd:1, '721':1, mf:1, tw:1, cx:1 }[c] ? c : '721');
+const allowStdClass = c => ({ sd:1, '721':1, '1155':1, mf:1, tw:1, cx:1 }[c] ? c : '721');
 const allowRpcRole = r => {
   const roleStr = String(r || 'private').toLowerCase();
   return { primary:1, blast:1, private:1 }[roleStr] ? roleStr : 'private';
@@ -919,7 +920,7 @@ ${!S.rpcs.length ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div cl
   <div class="card">${liveDrops.map(d => {
     const live = d.phases.find(p => p.status==='live');
     return `<div style="padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
-      <div style="flex:1"><div style="font-size:12.5px;font-weight:700">${esc(d.name)}</div><div style="font-size:10.5px;color:var(--green);margin-top:2px">⬤ ${esc(live.label)} · ${esc(live.priceLabel)} · Live</div></div>
+      <div style="flex:1"><div style="font-size:12.5px;font-weight:700">${esc(d.name)}</div><div style="font-size:10.5px;color:var(--green);margin-top:2px">⬤ ${esc(live.label)} · Live</div></div>
       <button class="btn btn-p btn-sm" onclick="openModal('${esc(d.id)}')">Mint</button>
     </div>`;
   }).join('')}</div>` : ''}
@@ -1213,10 +1214,13 @@ async function walletSave() {
   toast(`Wallet "${name}" added (UI only — start backend for signing)`,'ℹ');
   go('wallets');
 }
-function walletDelete(id) {
+async function walletDelete(id) {
   const w = S.wallets.find(w=>w.id===id);
   if(!w) return;
   if(!confirm(`Remove wallet "${w.name}"? This only removes it from RV3. Your funds are unaffected.`)) return;
+  if (API_ONLINE) {
+    try { await RV3_API.deleteWallet(id); } catch(e) { toast(e.message || 'Server delete failed','⚠'); return; }
+  }
   S.wallets = S.wallets.filter(w=>w.id!==id);
   saveState(); updateBadges();
   toast(`Wallet removed`,'ℹ');
@@ -1240,7 +1244,7 @@ function renderDrops() {
     return `<div class="dt-row">
       <div class="dtd"><div class="dn">${esc(d.name)}</div><div class="da-addr">${esc(d.addr)}</div><span class="ct ${d.chain==='Base'?'ct-base':d.chain==='Blast'?'ct-blast':'ct-eth'}" style="margin-top:3px;display:inline-flex">◆ ${esc(d.chain||'ETH')}</span></div>
       <div class="dtd"><span class="tb tb-${allowStdClass(d.stdClass)}">${esc(d.std||'ERC-721A')}</span></div>
-      <div class="dtd" style="font-size:12px">${best?esc(best.label+' · '+(best.priceLabel||'')):'—'}</div>
+      <div class="dtd" style="font-size:12px">${best?esc(best.label):'—'}</div>
       <div class="dtd">${(d.phases||[]).map(p=>`<span class="st st-${p.status==='live'?'live':p.status==='scheduled'?'pend':'end'}" style="margin:1px 2px 1px 0;font-size:9.5px">${esc(p.status)}</span>`).join('')||'—'}</div>
       <div class="dtd" style="display:flex;gap:5px">
         <button class="btn btn-p btn-xs" onclick="openModal('${esc(d.id)}')">⚡ Mint</button>
@@ -1295,7 +1299,10 @@ function renderTasks() {
 </div></div>`;
 }
 
-function cancelTask(id) {
+async function cancelTask(id) {
+  if (API_ONLINE) {
+    try { await RV3_API.cancelTask(id); } catch(e) { toast(e.message || 'Server cancel failed','⚠'); return; }
+  }
   S.tasks = S.tasks.filter(t=>t.id!==id);
   saveState(); updateBadges();
   toast('Task cancelled','ℹ');
@@ -2405,7 +2412,28 @@ function sweepExecute() {
 const NOTIFS = [];
 const CHANGELOG = [
   {
-    ver:'v1.3.0', date:'Jun 10 2026', isNew:true,
+    ver:'v1.5.0', date:'Jun 17 2026', isNew:true,
+    items:[
+      {tag:'fix', text:'allRpcUrls() now handles both string and object formats — custom UI RPC endpoints were silently ignored in all mint/fund/sweep operations'},
+      {tag:'fix', text:'walletDelete now calls server API — previously deleted wallets re-appeared after next sync'},
+      {tag:'fix', text:'cancelTask now calls server API — previously the worker would still execute cancelled tasks'},
+      {tag:'fix', text:'Drops table and overview live section no longer render undefined for phase price'},
+      {tag:'fix', text:'Replaced misleading Redis status indicator with accurate file-based store label'},
+      {tag:'new', text:'ERC-1155 drops now display a dedicated badge (was falling back to ERC-721A style)'},
+    ]
+  },
+  {
+    ver:'v1.4.0', date:'Jun 12 2026', isNew:false,
+    items:[
+      {tag:'fix', text:'Absolute asset and script paths for SPA routing compatibility'},
+      {tag:'fix', text:'CSP script-src now includes self so /js/api.js loads correctly'},
+      {tag:'fix', text:'Settings panel rendering and RV3_API.health self-overwrite bug resolved'},
+      {tag:'fix', text:'Non-blocking boot sequence loads Overview instantly'},
+      {tag:'fix', text:'allowRpcRole whitelist prevents invalid CSS class injection'},
+    ]
+  },
+  {
+    ver:'v1.3.0', date:'Jun 10 2026', isNew:false,
     items:[
       {tag:'new', text:'Fund Wallets: 4-step wizard (Distribute, Consolidate, Split gas, One-click)'},
       {tag:'new', text:'NFT Sweep: 3-step wizard with hub, chain filter, and collection filter'},
@@ -2680,7 +2708,7 @@ function renderGuide() {
   <div class="guide-hd" onclick="openChangelog()" style="background:rgba(74,124,252,.05);cursor:pointer">
     <span class="g-icon">🆕</span>
     <h3>What's New</h3>
-    <span style="font-size:10px;color:var(--accent3);font-weight:700">LATEST: v1.3.0</span>
+    <span style="font-size:10px;color:var(--accent3);font-weight:700">LATEST: v1.5.0</span>
     <span style="font-size:11px;color:var(--accent3);margin-left:auto;font-weight:500">View changelog ↗</span>
   </div>
 </div>
@@ -2753,7 +2781,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const latest = CHANGELOG[0];
   if(latest) {
     setTimeout(()=>{
-      addNotif(`${latest.ver} is out`, latest.items.slice(0,2).map(i=>i.text).join(' · '), 'new');
+      addNotif(`${latest.ver} is out`, latest.items.slice(0,2).map(i=>i.text).join(' · ').slice(0,120), 'new');
     }, 800);
   }
   // keyboard shortcuts
