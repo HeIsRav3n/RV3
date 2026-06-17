@@ -410,64 +410,61 @@ code{background:var(--bg4);padding:1px 5px;border-radius:4px;font-size:11px;font
 <body>
 
 <!-- LOGIN PAGE -->
-<div id="loginPage" role="main" style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg);padding:20px">
-  <div style="width:100%;max-width:380px">
-    <div style="text-align:center;margin-bottom:36px">
-      <div style="font-size:48px;margin-bottom:12px">⚡</div>
-      <h1 style="font-size:28px;font-weight:800;color:var(--text);margin-bottom:4px">RV3 Mint Bot</h1>
-      <p style="font-size:13px;color:var(--text2)">Secure access required</p>
+<div id="loginPage" role="main" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);z-index:9999">
+  <div style="width:100%;max-width:420px;padding:40px 20px">
+    <div style="text-align:center;margin-bottom:40px">
+      <img src="/assets/rv3-logo.png" alt="RV3" style="width:80px;height:80px;margin-bottom:20px;border-radius:12px;box-shadow:0 8px 24px rgba(74,124,252,.2)">
+      <h1 style="font-size:32px;font-weight:800;color:var(--text);margin:0 0 8px;letter-spacing:-0.5px">RV3</h1>
+      <p style="font-size:13px;color:var(--text2);margin:0">Personal NFT Mint Bot</p>
+      <p style="font-size:11px;color:var(--text3);margin:8px 0 0">Secure access required</p>
     </div>
 
     <div id="loginForm" style="display:block">
-      <div class="card" style="margin-bottom:0">
-        <div class="card-body">
-          <div class="fg">
-            <label class="fl" for="login-email">Email</label>
-            <input class="fi" id="login-email" type="email" placeholder="your@email.com" autocomplete="email">
-          </div>
-          <div class="fg">
-            <label class="fl" for="login-password">Password</label>
-            <input class="fi" id="login-password" type="password" placeholder="••••••••" autocomplete="current-password">
-            <div style="font-size:10px;color:var(--text3);margin-top:4px">8+ characters</div>
-          </div>
-          <button class="btn btn-p" style="width:100%;margin-top:16px" onclick="handleLogin()">Sign In</button>
-          <div style="text-align:center;margin-top:14px">
-            <span style="font-size:12px;color:var(--text2)">New user? </span>
-            <span style="color:var(--accent3);cursor:pointer;font-weight:600;font-size:12px" onclick="showRegister()">Create account</span>
-          </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:28px;margin-bottom:12px">
+        <div class="fg" style="margin-bottom:14px">
+          <label class="fl" for="login-email">Email Address</label>
+          <input class="fi" id="login-email" type="email" placeholder="your@email.com" autocomplete="email" style="font-size:14px;padding:11px 13px">
+        </div>
+        <div class="fg" style="margin-bottom:20px">
+          <label class="fl" for="login-password">Password</label>
+          <input class="fi" id="login-password" type="password" placeholder="••••••••" autocomplete="current-password" style="font-size:14px;padding:11px 13px">
+          <div style="font-size:10px;color:var(--text3);margin-top:5px">Minimum 8 characters</div>
+        </div>
+        <button class="btn btn-p" style="width:100%;padding:12px;font-size:14px;font-weight:600" onclick="handleLogin()">Sign In</button>
+        <div style="text-align:center;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+          <span style="font-size:12px;color:var(--text2)">New user? </span>
+          <span style="color:var(--accent3);cursor:pointer;font-weight:600;font-size:12px" onclick="showRegister()">Create account</span>
         </div>
       </div>
-      <div id="loginError" style="display:none;margin-top:12px" class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt" id="loginErrorMsg"></div></div>
+      <div id="loginError" style="display:none" class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt" id="loginErrorMsg" style="font-size:12px"></div></div>
     </div>
 
     <div id="registerForm" style="display:none">
-      <div class="card" style="margin-bottom:0">
-        <div class="card-body">
-          <div style="margin-bottom:12px">
-            <span style="color:var(--text2);font-size:12px;cursor:pointer" onclick="showLogin()">← Back to login</span>
-          </div>
-          <div class="fg">
-            <label class="fl" for="reg-email">Email</label>
-            <input class="fi" id="reg-email" type="email" placeholder="your@email.com" autocomplete="email">
-          </div>
-          <div class="fg">
-            <label class="fl" for="reg-password">Password</label>
-            <input class="fi" id="reg-password" type="password" placeholder="••••••••" autocomplete="new-password">
-            <div style="font-size:10px;color:var(--text3);margin-top:4px">Minimum 8 characters</div>
-          </div>
-          <div class="fg">
-            <label class="fl" for="reg-password-confirm">Confirm Password</label>
-            <input class="fi" id="reg-password-confirm" type="password" placeholder="••••••••" autocomplete="new-password">
-          </div>
-          <button class="btn btn-p" style="width:100%;margin-top:16px" onclick="handleRegister()">Create Account</button>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:28px;margin-bottom:12px">
+        <div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+          <span style="color:var(--accent3);font-size:13px;cursor:pointer;font-weight:600" onclick="showLogin()">← Back to sign in</span>
         </div>
+        <div class="fg" style="margin-bottom:14px">
+          <label class="fl" for="reg-email">Email Address</label>
+          <input class="fi" id="reg-email" type="email" placeholder="your@email.com" autocomplete="email" style="font-size:14px;padding:11px 13px">
+        </div>
+        <div class="fg" style="margin-bottom:14px">
+          <label class="fl" for="reg-password">Password</label>
+          <input class="fi" id="reg-password" type="password" placeholder="••••••••" autocomplete="new-password" style="font-size:14px;padding:11px 13px">
+          <div style="font-size:10px;color:var(--text3);margin-top:5px">Minimum 8 characters</div>
+        </div>
+        <div class="fg" style="margin-bottom:20px">
+          <label class="fl" for="reg-password-confirm">Confirm Password</label>
+          <input class="fi" id="reg-password-confirm" type="password" placeholder="••••••••" autocomplete="new-password" style="font-size:14px;padding:11px 13px">
+        </div>
+        <button class="btn btn-p" style="width:100%;padding:12px;font-size:14px;font-weight:600" onclick="handleRegister()">Create Account</button>
       </div>
-      <div id="registerError" style="display:none;margin-top:12px" class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt" id="registerErrorMsg"></div></div>
+      <div id="registerError" style="display:none" class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt" id="registerErrorMsg" style="font-size:12px"></div></div>
     </div>
 
-    <div style="text-align:center;margin-top:20px;font-size:10px;color:var(--text3)">
-      <span style="display:block;margin-bottom:4px">First user registered becomes admin</span>
-      <span>Admin can authorize additional email accounts</span>
+    <div style="text-align:center;margin-top:24px;font-size:11px;color:var(--text3);line-height:1.6">
+      <span style="display:block;margin-bottom:6px">👑 First account created becomes admin</span>
+      <span>Admins can authorize additional emails from Settings</span>
     </div>
   </div>
 </div>
