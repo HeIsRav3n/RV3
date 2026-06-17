@@ -39,6 +39,7 @@ function allRpcUrls(extra = []) {
 }
 
 function maskUrl(url) {
+  if (!url) return '';
   try {
     const u = new URL(url);
     const parts = u.pathname.split('/');

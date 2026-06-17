@@ -40,14 +40,19 @@ app.get('*', (req, res) => {
 
 worker.start();
 
-app.listen(config.port, () => {
-  console.log(`\n  RV3 Mint Bot`);
-  console.log(`  ─────────────────────────────`);
-  console.log(`  UI + API  →  http://localhost:${config.port}`);
-  console.log(`  Auth      →  ✓ login required`);
-  console.log(`  OpenSea   →  ${config.openseaApiKey ? 'configured' : '⚠ set OPENSEA_API_KEY in .env'}`);
-  console.log(`  RPC env   →  ${config.envRpcs.length} endpoint(s)`);
-  console.log(`  Live mint →  ${config.enableLiveMint ? 'ENABLED' : 'preflight only (set ENABLE_LIVE_MINT=true)'}`);
-  console.log(`  Version   →  1.5.0 (auth · mint · fund · sweep)`);
-  console.log(`  ─────────────────────────────\n`);
-});
+if (require.main === module) {
+  app.listen(config.port, () => {
+    console.log(`\n  RV3 Mint Bot`);
+    console.log(`  ─────────────────────────────`);
+    console.log(`  UI + API  →  http://localhost:${config.port}`);
+    console.log(`  Auth      →  ✓ login required`);
+    console.log(`  OpenSea   →  ${config.openseaApiKey ? 'configured' : '⚠ set OPENSEA_API_KEY in .env'}`);
+    console.log(`  RPC env   →  ${config.envRpcs.length} endpoint(s)`);
+    console.log(`  Live mint →  ${config.enableLiveMint ? 'ENABLED' : 'preflight only (set ENABLE_LIVE_MINT=true)'}`);
+    console.log(`  Version   →  1.5.0 (auth · mint · fund · sweep)`);
+    console.log(`  ─────────────────────────────\n`);
+  });
+}
+
+module.exports = app;
+

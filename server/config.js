@@ -22,7 +22,7 @@ const config = {
   walletEncryptionKey: (process.env.WALLET_ENCRYPTION_KEY || '').trim(),
   enableLiveMint: process.env.ENABLE_LIVE_MINT === 'true',
   taskRateLimit: parseInt(process.env.TASK_RATE_LIMIT_PER_MIN || '10', 10),
-  dataDir: path.join(__dirname, '..', 'data'),
+  dataDir: process.env.DATA_DIR || (process.env.VERCEL ? '/tmp' : path.join(__dirname, '..', 'data')),
   envRpcs: [
     pickRpc('ETH_RPC_PRIMARY', 'Primary'),
     pickRpc('ETH_RPC_BLAST_1', 'Blast'),

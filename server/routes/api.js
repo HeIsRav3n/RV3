@@ -277,7 +277,7 @@ router.post('/fund', taskLimiter, (req, res) => {
     gasGwei,
     status: 'queued',
     time: new Date().toLocaleString(),
-    rpcUrls: (body.rpcUrls || []).filter(u => u.startsWith('https://')),
+    rpcUrls: (body.rpcUrls || []).filter(u => typeof u === 'string' && u.startsWith('https://')),
   };
   if (!op.hubId) return res.status(400).json({ error: 'hubId required' });
   if (!op.sourceIds.length) return res.status(400).json({ error: 'sourceIds required' });
@@ -300,7 +300,7 @@ router.post('/sweep', taskLimiter, (req, res) => {
     gasGwei: tx.GAS_PRESETS[body.gasPreset] || tx.GAS_PRESETS.normal,
     status: 'queued',
     time: new Date().toLocaleString(),
-    rpcUrls: (body.rpcUrls || []).filter(u => u.startsWith('https://')),
+    rpcUrls: (body.rpcUrls || []).filter(u => typeof u === 'string' && u.startsWith('https://')),
   };
   if (!op.hubId) return res.status(400).json({ error: 'hubId required' });
   if (!op.sourceIds.length) return res.status(400).json({ error: 'sourceIds required' });

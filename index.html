@@ -759,12 +759,12 @@ async function syncEnvRpcs() {
 async function syncFromServer() {
   if (!API_ONLINE) return;
   try {
-    const [{ tasks }, { history }, { wallets }] = await Promise.all([
+    const [{ tasks }, historyData, walletsData] = await Promise.all([
       RV3_API.listTasks(), RV3_API.history(), RV3_API.listWallets(),
     ]);
     if (tasks?.length) S.tasks = tasks;
-    if (history?.history?.length) S.history = history.history;
-    for (const w of wallets?.wallets || []) {
+    if (historyData?.history?.length) S.history = historyData.history;
+    for (const w of walletsData?.wallets || []) {
       const existing = S.wallets.find(x => x.id === w.id);
       if (existing) {
         existing.eth = w.eth ?? existing.eth;
