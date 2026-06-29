@@ -6,6 +6,7 @@ const tx = require('./tx');
 const rpc = require('./rpc');
 const prewarm = require('./prewarm');
 const taskStore = require('./taskStore');
+const routes = require('./routes');
 const { decrypt } = require('./crypto');
 
 const GAS_LIMIT = 350000n;
@@ -14,80 +15,93 @@ async function executeMintForWallet(walletEntry, task, log) {
   const slug = task.openseaSlug;
   if (!slug) throw new Error('No OpenSea slug — re-detect the drop');
 
+  const normalizedRoute = routes.normalizeRoute(task.route);
+  if (normalizedRoute === routes.ROUTES.DELEGATION) {
+    throw new Error('Delegation batch route not deployed — use Direct RPC or Flashbots Protect');
+  }
+
+  const chainSlug = task.chainSlug || 'ethereum';
   const pk = decrypt(walletEntry.encryptedKey);
   const signer = new ethers.Wallet(pk);
   const minter = await signer.getAddress();
 
-  const urls = tx.pickSendUrls(task.route, task.rpcUrls || []);
-  if (!urls.length) throw new Error('No RPC available');
+  const blast = task.rpcBlast !== false;
+  const sendUrls = tx.pickSendUrls(task.route, task.rpcUrls || [], chainSlug);
+  if (!sendUrls.length) throw new Error('No RPC available');
 
-  // ── Fast path: use pre-warmed calldata (simulation already done) ──
-  const cached = prewarm.getEntry(task.id, walletEntry.id);
-  let mintTx;
-  let alreadySimulated = false;
+  const fastest = await rpc.getFastestUrl(sendUrls);
 
-  if (cached?.mintTx && cached.simulated) {
-    mintTx = cached.mintTx;
-    alreadySimulated = true;
-    log('info', `${walletEntry.name} — pre-warmed (memory) ✓`);
-  } else {
-    // Check Neon-persisted prewarm cache (survives Lambda hops on Vercel)
-    const neonCached = await taskStore.getPrewarmCache(task.id, walletEntry.id).catch(() => null);
-    if (neonCached) {
-      mintTx = neonCached;
-      alreadySimulated = true;
-      log('info', `${walletEntry.name} — pre-warmed (Neon) ✓`);
-    } else {
-    // ── Slow path: fetch calldata now ──
-    log('info', `${walletEntry.name} — fetching calldata (not pre-warmed)`);
-    mintTx = await opensea.buildDropMintTransaction(slug, minter, task.qty || 1);
+  const memCached = prewarm.getEntry(task.id, walletEntry.id);
+  const neonCached = (!memCached?.mintTx)
+    ? await taskStore.getPrewarmCache(task.id, walletEntry.id).catch(() => null)
+    : null;
 
-    // balance check (skip when pre-warmed — already checked at pre-warm time)
-    const provider = new ethers.JsonRpcProvider(urls[0]);
-    const bal = await provider.getBalance(minter);
-    const gasGwei = task.gasGwei || tx.GAS_PRESETS.normal;
-    const gasCost = ethers.parseUnits(String(gasGwei), 'gwei') * GAS_LIMIT;
-    const need = mintTx.value + gasCost;
-    if (bal < need) {
-      throw new Error(
-        `${walletEntry.name}: need ${ethers.formatEther(need)} ETH, have ${ethers.formatEther(bal)}`
-      );
-    }
-
-    log('info', `${walletEntry.name} — simulating…`);
-    await rpc.simulateCall(urls[0], minter, mintTx.to, mintTx.data, '0x' + mintTx.value.toString(16));
-    alreadySimulated = true;
-    log('info', `${walletEntry.name} — simulation passed`);
-    } // end slow path
-  }
-
-  // ── Phase 2+5: batch sign (nonce+chainId in one call) then blast broadcast ──
+  let mintTx = memCached?.mintTx || neonCached?.mintTx || null;
+  let preSigned = memCached?.signed || neonCached?.signed || null;
+  const alreadySimulated = !!(mintTx && (memCached?.simulated ?? true));
   const gasGwei = task.gasGwei || tx.GAS_PRESETS.normal;
   const start = Date.now();
 
-  const { signed } = await tx.buildAndSign(signer, {
-    to: mintTx.to,
-    data: mintTx.data,
-    value: mintTx.value,
-    gasLimit: GAS_LIMIT,
-  }, { rpcUrl: urls[0], gasGwei });
+  // ── Tier 1 (~50ms): pre-signed tx cached → immediate blast ──
+  if (preSigned) {
+    log('info', `${walletEntry.name} — T1 pre-signed blast`);
+    try {
+      const hash = await tx.broadcastRaw(preSigned, sendUrls, {
+        blast, route: routes.normalizeRoute(task.route), targetBlock: task.targetBlock,
+      });
+      const broadcastMs = Date.now() - start;
+      log('ok', `${walletEntry.name} — ${hash.slice(0, 14)}… in ${broadcastMs}ms [T1]`);
+      prewarm.clearEntry(task.id, walletEntry.id);
+      return { hash, gasUsed: 0n, broadcastMs, tier: 1 };
+    } catch (e) {
+      if (!/nonce|already known|replacement|underpriced/i.test(e.message)) throw e;
+      log('info', `${walletEntry.name} — T1 nonce stale → T2 re-sign`);
+      preSigned = null;
+    }
+  }
 
-  const hash = await tx.broadcastRaw(signed, urls);
+  // ── Slow path: fetch calldata if not cached ──
+  if (!mintTx) {
+    log('info', `${walletEntry.name} — T3 fetching calldata (not pre-warmed)`);
+    mintTx = await opensea.buildDropMintTransaction(slug, minter, task.qty || 1);
+
+    const provider = new ethers.JsonRpcProvider(fastest);
+    const bal = await provider.getBalance(minter);
+    const gasCost = ethers.parseUnits(String(gasGwei), 'gwei') * GAS_LIMIT;
+    if (bal < mintTx.value + gasCost) {
+      throw new Error(`${walletEntry.name}: need ${ethers.formatEther(mintTx.value + gasCost)} ETH, have ${ethers.formatEther(bal)}`);
+    }
+    await rpc.simulateCall(fastest, minter, mintTx.to, mintTx.data, '0x' + mintTx.value.toString(16));
+    log('info', `${walletEntry.name} — simulation passed`);
+  }
+
+  // ── Tier 2 (~150ms): calldata cached, sign fresh nonce → blast ──
+  log('info', `${walletEntry.name} — T2 sign + blast`);
+  const { signed, maxFee } = await tx.buildAndSign(signer, {
+    to: mintTx.to, data: mintTx.data, value: mintTx.value, gasLimit: GAS_LIMIT,
+  }, { rpcUrl: fastest, gasGwei });
+
+  const signMs = Date.now() - start;
+  const hash = await tx.broadcastRaw(signed, sendUrls, {
+    blast, route: routes.normalizeRoute(task.route), targetBlock: task.targetBlock,
+  });
   const broadcastMs = Date.now() - start;
-  log('ok', `${walletEntry.name} — broadcast ${hash.slice(0, 14)}… in ${broadcastMs}ms`);
 
-  // Clear pre-warm entry so nonce isn't reused
-  prewarm.clearTask(task.id);
-
-  // Don't waitForTransaction — block confirmation (~12s) is chain-controlled and
-  // causes false "failed" status when the Lambda times out before the block arrives.
-  // The tx is already in the mempool; return hash immediately.
-  return { hash, gasUsed: 0n, broadcastMs };
+  log('ok', `${walletEntry.name} — ${hash.slice(0, 14)}… sign ${signMs}ms · total ${broadcastMs}ms · maxFee ${maxFee?.toFixed(2)}gwei [T${mintTx ? 2 : 3}]`);
+  prewarm.clearEntry(task.id, walletEntry.id);
+  return { hash, gasUsed: 0n, broadcastMs, signMs, tier: mintTx ? 2 : 3 };
 }
 
 async function runMintTask(task, wallets, log) {
   const selected = wallets.filter(w => w.encryptedKey).slice(0, task.wallets || 1);
   if (!selected.length) throw new Error('No wallets with server keys imported');
+
+  const chainSlug = task.chainSlug || 'ethereum';
+  const sendUrls = tx.pickSendUrls(task.route, task.rpcUrls || [], chainSlug);
+
+  if (task.rpcPrewarm !== false && sendUrls.length) {
+    await rpc.prewarmUrls(sendUrls);
+  }
 
   let minted = 0;
   let totalGas = 0n;
@@ -96,7 +110,6 @@ async function runMintTask(task, wallets, log) {
   const txHashes = [];
   const errors = [];
 
-  // Wrap each wallet call to capture attempt duration even on failure
   const results = await Promise.allSettled(selected.map(async w => {
     const t0 = Date.now();
     try {

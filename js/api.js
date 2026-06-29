@@ -129,6 +129,10 @@ const RV3_API = {
     return this.request(`/tasks/${encodeURIComponent(id)}/priority`, { method: 'POST', body: '{}' });
   },
 
+  async taskReceipt(id) {
+    return this.request(`/tasks/${encodeURIComponent(id)}/receipt`);
+  },
+
   async history() {
     return this.request('/history');
   },

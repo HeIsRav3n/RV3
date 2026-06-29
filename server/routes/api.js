@@ -16,7 +16,9 @@ const { encrypt, addressFromKey } = require('../services/crypto');
 const walletStore = require('../services/wallets');
 const prewarm = require('../services/prewarm');
 const taskStore = require('../services/taskStore');
+const routes = require('../services/routes');
 const mint = require('../services/mint');
+const receipt = require('../services/receipt');
 
 const router = express.Router();
 
@@ -44,6 +46,7 @@ router.get('/health', (req, res) => {
       etherscan: !!config.etherscanApiKey,
       blur: !!config.blurApiKey,
       rpc: config.envRpcs.length,
+      builders: config.builderRpcs.length,
       discord: !!config.discordWebhook,
       telegram: !!(config.telegramToken && config.telegramChatId),
       walletEncryption: config.hasWalletEncryption,
@@ -60,6 +63,7 @@ router.get('/settings/status', (req, res) => {
       etherscan: { configured: !!config.etherscanApiKey, label: 'Etherscan API' },
       blur: { configured: !!config.blurApiKey, label: 'Blur API' },
       rpc: { configured: config.envRpcs.length > 0, count: config.envRpcs.length, label: 'Env RPC endpoints' },
+      builders: { configured: config.builderRpcs.length, count: config.builderRpcs.length, label: 'Builder endpoints' },
       flashbots: { configured: !!config.flashbotsAuthKey, label: 'Flashbots auth key' },
       discord: { configured: !!config.discordWebhook, label: 'Discord webhook' },
       telegram: { configured: !!(config.telegramToken && config.telegramChatId), label: 'Telegram bot' },
@@ -335,7 +339,7 @@ router.post('/tasks', taskLimiter, async (req, res) => {
     openseaSlug: String(body.openseaSlug || '').slice(0, 120) || null,
     contractAddress: String(body.contractAddress || '').slice(0, 66) || null,
     chainSlug: String(body.chainSlug || 'ethereum').slice(0, 20),
-    route: String(body.route || 'DIRECT RPC').slice(0, 40),
+    route: routes.normalizeRoute(body.route || routes.ROUTES.DIRECT_RPC),
     wallets: Math.min(Math.max(parseInt(body.wallets, 10) || 1, 1), 50),
     qty: Math.min(Math.max(parseInt(body.qty, 10) || 1, 1), 10),
     name: String(body.name || body.drop || 'Task').slice(0, 120),
@@ -346,6 +350,8 @@ router.post('/tasks', taskLimiter, async (req, res) => {
     gasPreset,
     gasGwei,
     rpcBlast: body.rpcBlast !== false,
+    rpcPrewarm: body.rpcPrewarm !== false,
+    targetBlock: body.targetBlock != null ? parseInt(body.targetBlock, 10) : null,
     rpcCount: body.rpcCount || config.envRpcs.length,
     rpcUrls: (body.rpcUrls || []).filter(u => typeof u === 'string' && u.startsWith('https://')),
     createdAt: new Date().toISOString(),
@@ -436,6 +442,18 @@ router.post('/tasks/:id/run', async (req, res) => {
         ? `${result.txHashes.length} tx(s) broadcast in ${result.avgBroadcastMs}ms`
         : (task.error || 'no txs');
       notify.send(`RV3 mint ${task.status}`, `${task.drop} · ${note}`).catch(() => {});
+      // Async receipt watch — updates status to confirmed/reverted without blocking response
+      if (result.txHashes.length) {
+        const watchUrls = rpc.allRpcUrls(task.rpcUrls || [], task.chainSlug || 'ethereum');
+        result.txHashes.forEach(hash => {
+          receipt.watchAndConfirm(task.id, hash, watchUrls, r => {
+            task.status = r.status;
+            task.blockNumber = r.blockNumber;
+            task.gasUsed = r.gasUsed;
+            notify.send(`RV3 mint ${r.status}`, `${task.drop} · block ${r.blockNumber}`).catch(() => {});
+          });
+        });
+      }
     } catch (e) {
       task.status = 'failed';
       task.error = e.message;
@@ -457,6 +475,24 @@ router.post('/tasks/:id/priority', async (req, res) => {
     await taskStore.updateTaskStatus(task.id, task.status, { priority: true });
     worker.save();
     res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/tasks/:id/receipt', async (req, res) => {
+  try {
+    const task = await resolveTask(req.params.id);
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (!task.txHashes?.length) return res.json({ receipt: null, status: task.status });
+    const urls = rpc.allRpcUrls(task.rpcUrls || [], task.chainSlug || 'ethereum');
+    const r = await receipt.checkReceipt(task.txHashes[0], urls);
+    if (r && task.status === 'broadcast') {
+      await taskStore.updateTaskStatus(task.id, r.status, {
+        blockNumber: r.blockNumber, gasUsed: r.gasUsed, confirmedAt: new Date().toISOString(),
+      });
+    }
+    res.json({ receipt: r, status: r ? r.status : 'pending' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

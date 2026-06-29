@@ -3,15 +3,21 @@
 const config = require('../config');
 
 const BASE = 'https://api.opensea.io/api/v2';
+const DEFAULT_TIMEOUT = 8000;
+const FAST_TIMEOUT = 5000;
+
+const dropCache = new Map(); // slug → { data, at }
+const DROP_CACHE_MS = 15_000;
 
 async function osFetch(path, opts = {}) {
   if (!config.openseaApiKey) throw new Error('OPENSEA_API_KEY not configured in .env');
-  const { method = 'GET', body, timeout = 12000 } = opts;
+  const { method = 'GET', body, timeout = DEFAULT_TIMEOUT } = opts;
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: {
       'X-API-KEY': config.openseaApiKey,
       Accept: 'application/json',
+      Connection: 'keep-alive',
       ...(body ? { 'Content-Type': 'application/json' } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -55,10 +61,15 @@ async function getCollectionStats(slug) {
 }
 
 async function getDrop(slug) {
-  return osFetch(`/drops/${encodeURIComponent(slug)}`);
+  const cached = dropCache.get(slug);
+  if (cached && Date.now() - cached.at < DROP_CACHE_MS) return cached.data;
+  const data = await osFetch(`/drops/${encodeURIComponent(slug)}`);
+  dropCache.set(slug, { data, at: Date.now() });
+  return data;
 }
 
-async function buildDropMintTransaction(slug, minter, quantity = 1, timeout = 12000) {
+/** Critical path for mint speed — POST /drops/{slug}/mint returns SeaDrop calldata. */
+async function buildDropMintTransaction(slug, minter, quantity = 1, timeout = FAST_TIMEOUT) {
   const data = await osFetch(`/drops/${encodeURIComponent(slug)}/mint`, {
     method: 'POST',
     body: { minter: minter.toLowerCase(), quantity },
@@ -69,6 +80,13 @@ async function buildDropMintTransaction(slug, minter, quantity = 1, timeout = 12
     data: data.data || data.calldata,
     value: BigInt(data.value || '0'),
   };
+}
+
+/** Prefetch calldata for multiple wallets in parallel — use during prewarm window. */
+async function buildDropMintBatch(slug, minters, quantity = 1) {
+  return Promise.allSettled(
+    minters.map(m => buildDropMintTransaction(slug, m, quantity))
+  );
 }
 
 async function getAccountNfts(chain, address, limit = 50) {
@@ -92,15 +110,22 @@ async function buildTransferActions(fromAddress, toAddress, assets) {
   });
 }
 
+function invalidateDropCache(slug) {
+  if (slug) dropCache.delete(slug);
+  else dropCache.clear();
+}
+
 module.exports = {
   getCollection,
   getContract,
   getCollectionStats,
   getDrop,
   buildDropMintTransaction,
+  buildDropMintBatch,
   getAccountNfts,
   buildTransferActions,
   chainSlug,
   displayChain,
   osFetch,
+  invalidateDropCache,
 };

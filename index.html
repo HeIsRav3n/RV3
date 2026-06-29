@@ -734,6 +734,7 @@ code{background:var(--bg4);padding:1px 5px;border-radius:4px;font-size:11px;font
 
 <script src="/js/api.js"></script>
 <script src="/js/auth.js"></script>
+<script src="/js/html2canvas.min.js"></script>
 <script>
 // RV3 Mint Bot
 
@@ -850,6 +851,17 @@ const S = {
 // gas presets (gwei)
 const GAS_PRESETS = { slow: 3, normal: 7, fast: 15, turbo: 25 };
 
+const ROUTE_LABELS = {
+  direct_rpc: 'Direct RPC', public: 'Public mempool', public_mempool: 'Public mempool',
+  fb_protect: 'Flashbots Protect', flashbots_protect: 'Flashbots Protect',
+  fb_bundle: 'Flashbots bundle', flashbots_bundle: 'Flashbots bundle',
+  delegation: 'Delegation batch', delegation_batch: 'Delegation batch',
+};
+function fmtRoute(r) {
+  const k = String(r || '').toLowerCase().replace(/[\s-]+/g, '_');
+  return ROUTE_LABELS[k] || ROUTE_LABELS[k.replace(/^fb_/, 'fb_')] || String(r || '').replace(/_/g, ' ');
+}
+
 // PERSISTENCE: session-scoped, clears on close
 function saveState() {
   try {
@@ -879,7 +891,7 @@ function loadState() {
     if (raw) {
       const s = JSON.parse(raw);
       if (s && typeof s === 'object') S.settings = Object.assign({}, S.settings, {
-        defaultRoute: ['direct_rpc','public_mempool','flashbots_protect','flashbots_bundle','delegation_batch'].includes(s.defaultRoute)?s.defaultRoute:S.settings.defaultRoute,
+        defaultRoute: ['direct_rpc','public','fb_protect','fb_bundle','delegation','public_mempool','flashbots_protect','flashbots_bundle','delegation_batch'].includes(s.defaultRoute)?s.defaultRoute:S.settings.defaultRoute,
         maxSpendEth: clip(s.maxSpendEth,20), lowBalanceAlert: clip(s.lowBalanceAlert,20),
         defaultGasPreset: ['slow','normal','fast','turbo','custom'].includes(s.defaultGasPreset)?s.defaultGasPreset:S.settings.defaultGasPreset,
         rpcBlast: !!s.rpcBlast, rpcPrewarm: !!s.rpcPrewarm,
@@ -1040,7 +1052,7 @@ ${!S.rpcs.length ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div cl
     <div class="rd" style="background:${(r.status === 'completed' || r.status === 'broadcast') ? 'var(--green)' : r.status === 'failed' ? 'var(--red)' : 'var(--amber)'}"></div>
     <div class="ri">
       <div class="rn">${esc(r.drop)}</div>
-      <div class="rm">${esc(r.route || '')} · ${r.wallets} wallet${r.wallets !== 1 ? 's' : ''}${(r.avgBroadcastMs || r.avgConfirmMs) ? ` · ${r.avgBroadcastMs || r.avgConfirmMs}ms` : ''} · ${esc(r.time)}</div>
+      <div class="rm">${esc(fmtRoute(r.route))} · ${r.wallets} wallet${r.wallets !== 1 ? 's' : ''}${(r.avgBroadcastMs || r.avgConfirmMs) ? ` · ${r.avgBroadcastMs || r.avgConfirmMs}ms` : ''} · ${esc(r.time)}</div>
       ${r.txHash ? `<div style="font-size:10px;margin-top:2px"><a href="https://etherscan.io/tx/${r.txHash}" target="_blank" rel="noopener" style="color:var(--accent3);text-decoration:none">↗ ${r.txHash.slice(0,14)}…</a></div>` : ''}
     </div>
     <div class="st st-${(r.status === 'completed' || r.status === 'broadcast') ? 'ok' : r.status === 'failed' ? 'fail' : 'part'}">${r.status === 'broadcast' ? 'SENT' : r.status.toUpperCase()}</div>
@@ -1536,25 +1548,36 @@ function renderTasks() {
     const isQueued = t.status === 'queued';
     const isRunning = t.status === 'running';
     const isBroadcast = t.status === 'broadcast';
-    const dotColor = isQueued ? 'var(--amber)' : isRunning ? 'var(--accent)' : (isBroadcast || t.status === 'completed') ? 'var(--green)' : 'var(--red)';
-    const stClass = isQueued ? 'q' : isRunning ? 'run' : (isBroadcast || t.status === 'completed') ? 'ok' : 'fail';
-    const displayMs = isBroadcast ? (t.avgBroadcastMs || t.avgConfirmMs) : (t.status === 'failed' ? t.avgAttemptMs : null);
-    const speed = displayMs ? `<span style="font-size:10px;color:${isBroadcast ? 'var(--green)' : 'var(--text3)'};font-family:var(--mono)">${displayMs}ms</span>` : '';
-    const sched = t.scheduledFor ? `<div style="font-size:10px;color:var(--amber);margin-top:2px;font-family:var(--mono)">${esc(t.scheduledFor)}</div>` : '';
+    const isConfirmed = t.status === 'confirmed';
+    const isReverted = t.status === 'reverted';
+    const isDone = isBroadcast || isConfirmed || isReverted || t.status === 'completed' || t.status === 'failed';
+    const dotColor = isQueued ? 'var(--amber)' : isRunning ? 'var(--accent)'
+      : (isConfirmed || t.status === 'completed') ? 'var(--green)'
+      : isBroadcast ? '#60a5fa'
+      : 'var(--red)';
+    const stClass = isQueued ? 'q' : isRunning ? 'run'
+      : (isConfirmed || t.status === 'completed') ? 'ok'
+      : isBroadcast ? 'run'
+      : 'fail';
+    const displayMs = (isBroadcast || isConfirmed || isReverted) ? (t.avgBroadcastMs || t.avgConfirmMs)
+      : (t.status === 'failed' ? t.avgAttemptMs : null);
+    const speed = displayMs ? `<span style="font-size:10px;color:${isConfirmed ? 'var(--green)' : isBroadcast ? '#60a5fa' : 'var(--text3)'};font-family:var(--mono)">${displayMs}ms</span>` : '';
+    const hasSchedule = isQueued && t.scheduledFor;
+    const sched = hasSchedule ? `<div id="cd-${esc(t.id)}" style="font-size:10px;color:var(--amber);margin-top:2px;font-family:var(--mono)">…</div>` : '';
     const priorityBadge = t.priority ? `<span style="font-size:9px;color:var(--amber);font-weight:700;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);border-radius:3px;padding:1px 5px;margin-right:4px">PRIORITY</span>` : '';
-    const txLink = t.txHashes?.length ? `<div style="font-size:10px;margin-top:2px"><a href="https://etherscan.io/tx/${t.txHashes[0]}" target="_blank" rel="noopener" style="color:var(--accent3);text-decoration:none">↗ ${t.txHashes[0].slice(0,14)}…</a></div>` : '';
-    const errorLine = t.status === 'failed' && t.error ? `<div style="font-size:10px;color:var(--red);margin-top:2px;font-family:var(--mono)" title="${esc(t.error)}">✗ ${esc(t.error.length > 90 ? t.error.slice(0,90)+'…' : t.error)}</div>` : '';
-    const statusLabel = isBroadcast ? 'SENT' : t.status.toUpperCase();
+    const txLink = t.txHashes?.length ? `<div style="font-size:10px;margin-top:2px"><a href="https://etherscan.io/tx/${t.txHashes[0]}" target="_blank" rel="noopener" style="color:#60a5fa;text-decoration:none">↗ ${t.txHashes[0].slice(0,14)}…${isConfirmed ? ` · block ${t.blockNumber}` : ''}</a></div>` : '';
+    const errorLine = (t.status === 'failed' || isReverted) && t.error ? `<div style="font-size:10px;color:var(--red);margin-top:2px;font-family:var(--mono)" title="${esc(t.error)}">✗ ${esc(t.error.length > 90 ? t.error.slice(0,90)+'…' : t.error)}</div>` : '';
+    const statusLabel = isBroadcast ? 'SENT' : isConfirmed ? 'CONFIRMED' : isReverted ? 'REVERTED' : t.status.toUpperCase();
     return `
-  <div class="rr">
+  <div class="rr" id="tr-${esc(t.id)}">
     <div class="rd" style="background:${dotColor}"></div>
     <div class="ri">
       <div class="rn">${priorityBadge}${esc(t.name || t.drop)}</div>
-      <div class="rm">${esc(t.route || '')} · ${t.wallets} wallet${t.wallets !== 1 ? 's' : ''} · qty ${t.qty}${t.time ? ' · ' + esc(t.time) : ''}</div>
+      <div class="rm">${esc(fmtRoute(t.route))} · ${t.wallets} wallet${t.wallets !== 1 ? 's' : ''} · qty ${t.qty}${t.time ? ' · ' + esc(t.time) : ''}</div>
       ${sched}${txLink}${errorLine}
     </div>
     ${speed}
-    <div class="st st-${stClass}">${statusLabel}</div>
+    <div class="st st-${stClass}" id="st-${esc(t.id)}">${statusLabel}</div>
     ${isQueued ? `
       <button class="btn btn-xs" id="prewarm-btn-${esc(t.id)}" onclick="taskPrewarm('${esc(t.id)}')" title="Pre-fetch calldata + simulate now so execution is instant" style="background:rgba(74,124,252,.12);color:var(--accent3);border:1px solid rgba(74,124,252,.25)">⚡ Pre-warm</button>
       <button class="btn btn-p btn-xs" onclick="taskRunNow('${esc(t.id)}')" title="Execute immediately">▶ Now</button>
@@ -1568,6 +1591,60 @@ function renderTasks() {
   <div class="es-sub">Detect a drop or paste a contract address, then create a task</div>
   <button class="btn btn-p" onclick="openModal()" style="margin-top:12px">New mint task</button>
 </div></div>`;
+  // Start countdown timers for scheduled queued tasks
+  S.tasks.filter(t => t.scheduledFor && t.status === 'queued').forEach(t => startCountdown(t.id, t.scheduledFor));
+  // Poll receipts for any broadcast tasks
+  S.tasks.filter(t => t.status === 'broadcast').forEach(t => pollReceipt(t.id));
+}
+
+// ── Live countdown for scheduled tasks ──
+const _countdowns = new Map();
+function startCountdown(id, scheduledFor) {
+  if (_countdowns.has(id)) return;
+  const target = new Date(scheduledFor).getTime();
+  const el = () => document.getElementById('cd-' + id);
+  const tick = () => {
+    const e = el();
+    if (!e) { _countdowns.delete(id); return; }
+    const diff = target - Date.now();
+    if (diff <= 0) { e.textContent = '🔥 FIRING'; e.style.color = 'var(--green)'; return; }
+    const h = Math.floor(diff / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    const ms = String(diff % 1000).padStart(3, '0');
+    e.textContent = h ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}.${ms}`;
+    _countdowns.set(id, requestAnimationFrame(tick));
+  };
+  _countdowns.set(id, requestAnimationFrame(tick));
+}
+
+// ── Receipt polling: update SENT → CONFIRMED / REVERTED in place ──
+const _polled = new Set();
+async function pollReceipt(id, attempts = 0) {
+  if (_polled.has(id) || attempts > 40) return;
+  _polled.add(id);
+  try {
+    const { receipt: r } = await RV3_API.taskReceipt(id);
+    if (r) {
+      const t = S.tasks.find(x => x.id === id);
+      if (t) {
+        t.status = r.status;
+        t.blockNumber = r.blockNumber;
+        saveState();
+      }
+      const stEl = document.getElementById('st-' + id);
+      if (stEl) {
+        stEl.textContent = r.status === 'confirmed' ? 'CONFIRMED' : 'REVERTED';
+        stEl.className = `st st-${r.status === 'confirmed' ? 'ok' : 'fail'}`;
+      }
+      if (r.status === 'confirmed') toast(`Confirmed · block ${r.blockNumber}`, '✓');
+      else toast('Transaction reverted on-chain', '⚠');
+      _polled.delete(id);
+      return;
+    }
+  } catch { /* keep polling */ }
+  _polled.delete(id);
+  setTimeout(() => pollReceipt(id, attempts + 1), 4000);
 }
 
 async function cancelTask(id) {
@@ -1584,9 +1661,13 @@ async function taskRunNow(id) {
   if (!API_ONLINE) { toast('Backend required to run tasks','⚠'); return; }
   const task = S.tasks.find(t => t.id === id);
   try {
+    toast('Executing…','⚡');
     await RV3_API.runTaskNow(id, task);
-    toast('Task executing now','✓');
+    toast('Broadcast — polling for confirmation','✓');
+    // Update local state and start polling
+    if (task) { task.status = 'broadcast'; saveState(); }
     go('tasks');
+    setTimeout(() => pollReceipt(id), 5000);
   } catch (e) {
     toast(e.message || 'Failed to trigger task','⚠');
   }
@@ -1649,7 +1730,7 @@ function renderHistory() {
     <div class="rd" style="background:${r.status==='completed'?'var(--green)':r.status==='failed'?'var(--red)':'var(--amber)'}"></div>
     <div class="ri">
       <div class="rn">${esc(r.drop)}</div>
-      <div class="rm">${esc(r.route||'')} · ${r.wallets} wallet${r.wallets!==1?'s':''} · qty ${r.qty||1} · ${esc(r.time)}</div>
+      <div class="rm">${esc(fmtRoute(r.route))} · ${r.wallets} wallet${r.wallets!==1?'s':''} · qty ${r.qty||1} · ${esc(r.time)}</div>
     </div>
     <div style="text-align:right;font-size:10px;color:var(--text3);margin-right:8px;flex-shrink:0">
       <div>${r.minted||0}/${(r.wallets||1)*(r.qty||1)} minted</div>
@@ -1680,26 +1761,33 @@ function renderPnl() {
   const c = document.getElementById('content');
   const totalMinted = S.history.reduce((a,r)=>a+(r.minted||0),0);
   const totalGas = S.history.reduce((a,r)=>a+(r.gasCostUsd||0),0);
+  
+  if (totalMinted) {
+    document.getElementById('tba').innerHTML = `<button class="btn btn-sm btn-p" onclick="saveCard()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:middle"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Export PNG</button>`;
+  }
+  
   c.innerHTML = totalMinted ? `
-<div class="pnl-g">
-  <div class="pnl-c"><div class="pnl-lbl">Total minted</div><div class="pnl-val">${totalMinted} NFTs</div><div style="font-size:10.5px;color:var(--text2);margin-top:3px">across ${S.history.length} run${S.history.length!==1?'s':''}</div></div>
-  <div class="pnl-c"><div class="pnl-lbl">Total gas spent</div><div class="pnl-val amb">$${totalGas.toFixed(2)}</div><div style="font-size:10.5px;color:var(--text2);margin-top:3px">USD equiv</div></div>
-  <div class="pnl-c"><div class="pnl-lbl">Avg cost/NFT</div><div class="pnl-val">${totalMinted?'$'+(totalGas/totalMinted).toFixed(2):'—'}</div><div style="font-size:10.5px;color:var(--text2);margin-top:3px">gas only</div></div>
-</div>
-<div class="ban ban-i"><div class="ban-ico">ℹ</div><div class="ban-txt">Connect OpenSea/Blur API in Settings for live floor price tracking and unrealised PnL calculations.</div></div>
-<div class="card">
-  <div class="card-hd"><h2>Run breakdown</h2></div>
-  <div style="padding:0">
-    <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;background:var(--bg3);padding:8px 14px;border-bottom:1px solid var(--border)">
-      ${['Run','Minted','Gas cost','Status'].map(h=>`<div style="font-size:9.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;font-weight:700">${h}</div>`).join('')}
+<div id="card" style="padding:12px; background:var(--bg); border-radius:var(--r2);">
+  <div class="pnl-g">
+    <div class="pnl-c"><div class="pnl-lbl">Total minted</div><div class="pnl-val">${totalMinted} NFTs</div><div style="font-size:10.5px;color:var(--text2);margin-top:3px">across ${S.history.length} run${S.history.length!==1?'s':''}</div></div>
+    <div class="pnl-c"><div class="pnl-lbl">Total gas spent</div><div class="pnl-val amb">$${totalGas.toFixed(2)}</div><div style="font-size:10.5px;color:var(--text2);margin-top:3px">USD equiv</div></div>
+    <div class="pnl-c"><div class="pnl-lbl">Avg cost/NFT</div><div class="pnl-val">${totalMinted?'$'+(totalGas/totalMinted).toFixed(2):'—'}</div><div style="font-size:10.5px;color:var(--text2);margin-top:3px">gas only</div></div>
+  </div>
+  <div class="ban ban-i"><div class="ban-ico">ℹ</div><div class="ban-txt">Connect OpenSea/Blur API in Settings for live floor price tracking and unrealised PnL calculations.</div></div>
+  <div class="card">
+    <div class="card-hd"><h2>Run breakdown</h2></div>
+    <div style="padding:0">
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;background:var(--bg3);padding:8px 14px;border-bottom:1px solid var(--border)">
+        ${['Run','Minted','Gas cost','Status'].map(h=>`<div style="font-size:9.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;font-weight:700">${h}</div>`).join('')}
+      </div>
+      ${S.history.map(r=>`
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">
+        <div><div style="font-size:12px;font-weight:700">${esc(r.drop)}</div><div style="font-size:10px;color:var(--text3)">${esc(r.time)}</div></div>
+        <div style="font-size:12px">${r.minted||0}</div>
+        <div style="font-size:12px">$${(r.gasCostUsd||0).toFixed(2)}</div>
+        <div class="st st-${r.status==='completed'?'ok':r.status==='failed'?'fail':'part'}" style="font-size:10px">${r.status.toUpperCase()}</div>
+      </div>`).join('')}
     </div>
-    ${S.history.map(r=>`
-    <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">
-      <div><div style="font-size:12px;font-weight:700">${esc(r.drop)}</div><div style="font-size:10px;color:var(--text3)">${esc(r.time)}</div></div>
-      <div style="font-size:12px">${r.minted||0}</div>
-      <div style="font-size:12px">$${(r.gasCostUsd||0).toFixed(2)}</div>
-      <div class="st st-${r.status==='completed'?'ok':r.status==='failed'?'fail':'part'}" style="font-size:10px">${r.status.toUpperCase()}</div>
-    </div>`).join('')}
   </div>
 </div>` : `
 <div class="card"><div class="es">
@@ -2312,13 +2400,15 @@ async function mSubmit() {
     openseaSlug: drop.openseaSlug || null,
     contractAddress: addrMatch ? addrMatch[0] : null,
     chainSlug: drop.chainSlug || 'ethereum',
-    route: route.replace(/_/g,' ').toUpperCase(), qty,
+    route,
+    qty,
     name: taskName || drop.name,
     scheduledFor: schedOn ? schedTime : null,
     scheduledAt,
     gasPreset: preset,
     gasGwei: gwei,
     rpcBlast: S.settings.rpcBlast !== false,
+    rpcPrewarm: S.settings.rpcPrewarm !== false,
     rpcCount: S.rpcs.length,
     rpcUrls: S.rpcs.map(r => r.urlFull || r.url).filter(u => u.startsWith('https://')),
   };
@@ -3359,6 +3449,23 @@ document.addEventListener('DOMContentLoaded', async () => {
       else if(document.getElementById('registerForm').style.display !== 'none') handleRegister();
     }
   });
+async function saveCard(data) {
+  if (data && typeof renderPnl === 'function') {
+    renderPnl();
+  }
+  await new Promise(r => setTimeout(r, 300));
+  const card = document.getElementById('card');
+  if (!card) return;
+  const canvas = await html2canvas(card, {
+    scale: 2,
+    backgroundColor: null
+  });
+  const link = document.createElement('a');
+  link.download = `pnl_${data && data.token ? data.token : 'report'}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
   // Click outside modals to close
   document.getElementById('taskModal').addEventListener('click', e => {
     if(e.target === document.getElementById('taskModal')) closeModal();

@@ -9,6 +9,7 @@ const mint = require('./mint');
 const fund = require('./fund');
 const sweep = require('./sweep');
 const tx = require('./tx');
+const routes = require('./routes');
 const prices = require('./prices');
 const walletStore = require('./wallets');
 const prewarm = require('./prewarm');
@@ -47,20 +48,18 @@ function isTaskReady(task) {
   return Date.now() >= at - 1;
 }
 
-// Pre-warm tasks that are within 10s of their scheduled fire time (or immediately if unscheduled)
+// Pre-warm tasks within 30s of fire time (or immediately if unscheduled)
 async function prewarmPending() {
   const now = Date.now();
   const candidates = state.tasks.filter(t => {
     if (t.status !== 'queued') return false;
     if (!t.openseaSlug) return false;
     const at = parseScheduleTime(t);
-    return !at || (at - now) <= 10_000;
+    return !at || (at - now) <= 30_000;
   });
   for (const task of candidates) {
-    const hasPrewarm = state.wallets
-      .filter(w => w.encryptedKey)
-      .slice(0, task.wallets || 1)
-      .every(w => prewarm.isReady(task.id, w.id));
+    const selected = state.wallets.filter(w => w.encryptedKey).slice(0, task.wallets || 1);
+    const hasPrewarm = selected.every(w => prewarm.isReady(task.id, w.id));
     if (!hasPrewarm) {
       const log = (level, msg) => store.appendLog(state, level, msg);
       prewarm.prewarmTask(task, state.wallets, log).catch(() => {});
@@ -93,7 +92,8 @@ async function processMintTask(task) {
   save();
   log('info', `Start · ${task.drop} · ${task.wallets} wallet(s)`);
 
-  const urls = rpc.allRpcUrls(task.rpcUrls || []);
+  const chainSlug = task.chainSlug || 'ethereum';
+  const urls = tx.pickSendUrls(task.route, task.rpcUrls || [], chainSlug);
   if (!urls.length) {
     task.status = 'failed';
     task.error = 'No RPC — set ETH_RPC_PRIMARY in .env';
@@ -101,9 +101,14 @@ async function processMintTask(task) {
     return;
   }
 
-  const pings = await Promise.allSettled(urls.map(u => rpc.ping(u)));
-  const okRpc = pings.filter(p => p.status === 'fulfilled').length;
-  log('info', `RPC preflight ${okRpc}/${urls.length} OK`);
+  let okRpc = urls.length;
+  if (task.rpcPrewarm !== false) {
+    const pings = await Promise.allSettled(urls.map(u => rpc.ping(u)));
+    okRpc = pings.filter(p => p.status === 'fulfilled').length;
+    log('info', `RPC preflight ${okRpc}/${urls.length} OK · fastest ${(await rpc.getFastestUrl(urls)).slice(0, 40)}…`);
+  } else {
+    log('info', 'RPC preflight skipped (rpcPrewarm off)');
+  }
 
   if (!config.enableLiveMint) {
     task.status = 'completed';
@@ -264,7 +269,7 @@ async function start() {
   } catch (e) {
     store.appendLog(state, 'err', `walletStore.loadWallets: ${e.message}`);
   }
-  setInterval(tick, 500);
+  setInterval(tick, config.workerTickMs || 200);
   setInterval(() => { refreshWalletBalances().catch(() => {}); }, 60000);
   store.appendLog(state, 'info', 'RV3 worker started (mint · fund · sweep)');
   save();
