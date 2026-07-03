@@ -1,6 +1,7 @@
 'use strict';
 
 const config = require('../config');
+const gql = require('./gql');
 
 const BASE = 'https://api.opensea.io/api/v2';
 const DEFAULT_TIMEOUT = 8000;
@@ -63,23 +64,49 @@ async function getCollectionStats(slug) {
 async function getDrop(slug) {
   const cached = dropCache.get(slug);
   if (cached && Date.now() - cached.at < DROP_CACHE_MS) return cached.data;
-  const data = await osFetch(`/drops/${encodeURIComponent(slug)}`);
+
+  // Race GQL vs REST — GQL batches collection+stages in one call vs two REST calls.
+  // Whichever responds first wins; other is silently ignored.
+  const [gqlResult, restResult] = await Promise.allSettled([
+    gql.getDropInfo(slug),
+    osFetch(`/drops/${encodeURIComponent(slug)}`),
+  ]);
+
+  let data;
+  if (gqlResult.status === 'fulfilled' && gqlResult.value) {
+    data = gqlResult.value;
+  } else if (restResult.status === 'fulfilled') {
+    data = restResult.value;
+  } else {
+    throw restResult.reason || gqlResult.reason;
+  }
+
   dropCache.set(slug, { data, at: Date.now() });
   return data;
 }
 
-/** Critical path for mint speed — POST /drops/{slug}/mint returns SeaDrop calldata. */
+/**
+ * Critical path for mint speed — returns SeaDrop calldata { to, data, value }.
+ * Races GQL mutation vs REST POST; whichever responds first wins.
+ * Both paths are identical in output shape so callers are unaffected.
+ */
 async function buildDropMintTransaction(slug, minter, quantity = 1, timeout = FAST_TIMEOUT) {
-  const data = await osFetch(`/drops/${encodeURIComponent(slug)}/mint`, {
-    method: 'POST',
-    body: { minter: minter.toLowerCase(), quantity },
-    timeout,
-  });
-  return {
-    to: data.to || data.target,
-    data: data.data || data.calldata,
-    value: BigInt(data.value || '0'),
-  };
+  const [gqlResult, restResult] = await Promise.allSettled([
+    gql.buildMintTransaction(slug, minter, quantity),
+    osFetch(`/drops/${encodeURIComponent(slug)}/mint`, {
+      method: 'POST',
+      body: { minter: minter.toLowerCase(), quantity },
+      timeout,
+    }).then(data => ({
+      to: data.to || data.target,
+      data: data.data || data.calldata,
+      value: BigInt(data.value || '0'),
+    })),
+  ]);
+
+  if (gqlResult.status === 'fulfilled') return gqlResult.value;
+  if (restResult.status === 'fulfilled') return restResult.value;
+  throw restResult.reason; // REST is more descriptive on error
 }
 
 /** Prefetch calldata for multiple wallets in parallel — use during prewarm window. */

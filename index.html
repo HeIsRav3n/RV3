@@ -1918,6 +1918,18 @@ ${RV3_Auth.isAdmin() ? `
   </div>
 </div>
 
+<div class="card" style="margin-bottom:14px">
+  <div class="card-hd"><h2>📡 GQL Diagnostics</h2><button class="btn btn-sm btn-xs" onclick="runGqlProbe()" id="gql-probe-btn">Run probe</button></div>
+  <div class="card-body">
+    <div style="font-size:11.5px;color:var(--text2);margin-bottom:10px">Measures OpenSea GraphQL endpoint latency from the server. Mirrors <code>vps_latency_probe.sh</code> — avg/min/max + warm (excludes cold connection overhead).</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+      <label class="fl" style="margin:0;white-space:nowrap">Probe runs</label>
+      <input class="fi" id="gql-probe-n" type="number" min="1" max="20" value="5" style="width:60px;margin:0">
+    </div>
+    <div id="gql-probe-results" style="display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:10px;font-size:12px;font-family:monospace"></div>
+  </div>
+</div>
+
 <div class="card">
   <div class="card-hd"><h2>🔐 Security</h2></div>
   <div class="card-body" style="font-size:12px;line-height:1.9;color:var(--text2)">
@@ -2130,6 +2142,39 @@ async function testNotify() {
     toast(`Test sent via ${sent}`,'✓');
   } catch (e) {
     toast(e.message || 'Notification failed','⚠');
+  }
+}
+
+async function runGqlProbe() {
+  if (!API_ONLINE) { toast('Backend offline','⚠'); return; }
+  const btn = document.getElementById('gql-probe-btn');
+  const out = document.getElementById('gql-probe-results');
+  const n = Math.min(Math.max(parseInt(document.getElementById('gql-probe-n')?.value || '5', 10), 1), 20);
+  if (btn) { btn.disabled = true; btn.textContent = `Probing (${n})…`; }
+  if (out) { out.style.display = 'block'; out.textContent = 'Running…'; }
+  try {
+    const s = await RV3_API.diagOpenSea(n);
+    const bar = (ms) => {
+      if (ms == null) return '—';
+      const stars = Math.max(1, Math.round(ms / 50));
+      return '█'.repeat(Math.min(stars, 20)) + ` ${ms}ms`;
+    };
+    const rows = [
+      `target : ${s.target}`,
+      `runs   : ${s.n}   ok=${s.ok}   fail=${s.n - s.ok}`,
+      `avg    : ${bar(s.avg)}`,
+      `min    : ${bar(s.min)}`,
+      `max    : ${bar(s.max)}`,
+      `p50    : ${bar(s.p50)}`,
+      `warm   : ${bar(s.warm)}  (excl. cold connection)`,
+    ];
+    if (out) out.textContent = rows.join('\n');
+    toast(`GQL probe done — avg ${s.avg ?? '—'}ms`, '📡');
+  } catch (e) {
+    if (out) { out.style.display = 'block'; out.textContent = `Error: ${e.message}`; }
+    toast(e.message || 'Probe failed', '⚠');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Run probe'; }
   }
 }
 

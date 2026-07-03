@@ -19,6 +19,7 @@ const taskStore = require('../services/taskStore');
 const routes = require('../services/routes');
 const mint = require('../services/mint');
 const receipt = require('../services/receipt');
+const gql = require('../services/gql');
 
 const router = express.Router();
 
@@ -172,6 +173,16 @@ router.post('/rpc/ping', async (req, res) => {
     if (!url.startsWith('https://')) return res.status(400).json({ error: 'HTTPS URL required' });
     const ms = await rpc.ping(url);
     res.json({ ms, ok: true });
+  } catch (e) {
+    res.status(502).json({ error: e.message, ok: false });
+  }
+});
+
+router.get('/diag/opensea', async (req, res) => {
+  try {
+    const n = Math.min(Math.max(parseInt(req.query.n || '5', 10), 1), 20);
+    const stats = await gql.probeStats(n);
+    res.json(stats);
   } catch (e) {
     res.status(502).json({ error: e.message, ok: false });
   }

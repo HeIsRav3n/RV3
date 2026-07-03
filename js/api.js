@@ -133,6 +133,10 @@ const RV3_API = {
     return this.request(`/tasks/${encodeURIComponent(id)}/receipt`);
   },
 
+  async diagOpenSea(n = 5) {
+    return this.request(`/diag/opensea?n=${n}`);
+  },
+
   async history() {
     return this.request('/history');
   },
