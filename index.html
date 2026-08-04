@@ -1247,10 +1247,38 @@ function renderDropsTableHTML() {
 }
 
 // ── WALLETS ──
+// Which chain the Wallets page shows balances for. 'ethereum' uses the stored
+// balance; other chains are fetched live via /wallets/balances (not persisted).
+let WALLET_VIEW_CHAIN = 'ethereum';
+let WALLET_CHAIN_BAL = {};
+const WALLET_VIEW_CHAINS = [['ethereum','Ethereum'],['robinhood','Robinhood'],['base','Base'],['blast','Blast'],['polygon','Polygon']];
+
+function walletViewEth(w) {
+  if (WALLET_VIEW_CHAIN === 'ethereum') return w.eth || 0;
+  const v = WALLET_CHAIN_BAL[w.id];
+  return typeof v === 'number' ? v : null;
+}
+
+async function walletViewChain(chain) {
+  WALLET_VIEW_CHAIN = chain;
+  WALLET_CHAIN_BAL = {};
+  if (chain !== 'ethereum' && API_ONLINE) {
+    renderWallets();
+    try {
+      const { balances } = await RV3_API.walletBalances(chain);
+      for (const b of balances) if (b.eth != null) WALLET_CHAIN_BAL[b.id] = b.eth;
+    } catch (e) { toast(e.message || `Balance fetch failed on ${chain}`, '⚠'); }
+  }
+  renderWallets();
+}
+
 function renderWallets() {
   const c = document.getElementById('content');
   const tb = document.getElementById('tba');
   tb.innerHTML = `
+    <select class="fs" style="width:130px;height:28px;font-size:11.5px" onchange="walletViewChain(this.value)" title="Show balances on chain">
+      ${WALLET_VIEW_CHAINS.map(([v,l])=>`<option value="${v}"${WALLET_VIEW_CHAIN===v?' selected':''}>${l}</option>`).join('')}
+    </select>
     <button class="btn btn-sm" onclick="walletImport()">Import</button>
     <button class="btn btn-p btn-sm" onclick="walletGenerate()">+ Generate</button>
   `;
@@ -1277,7 +1305,7 @@ ${S.wallets.length ? `
   ${S.wallets.map(w=>walletCardHTML(w, lowBal)).join('')}
 </div>
 <div style="font-size:11.5px;color:var(--text3);text-align:center;padding:8px 0">
-  Total: <span style="color:var(--text);font-weight:700">${S.wallets.reduce((a,w)=>a+w.eth,0).toFixed(4)} ETH</span> across ${S.wallets.length} wallet${S.wallets.length!==1?'s':''}
+  Total: <span style="color:var(--text);font-weight:700">${S.wallets.reduce((a,w)=>a+(walletViewEth(w)||0),0).toFixed(4)} ETH</span> across ${S.wallets.length} wallet${S.wallets.length!==1?'s':''}${WALLET_VIEW_CHAIN!=='ethereum'?` on <span style="color:var(--text);font-weight:700;text-transform:capitalize">${WALLET_VIEW_CHAIN}</span>`:''}
 </div>` : `
 <div class="card"><div class="es">
   <div class="es-icon">◫</div>
@@ -1319,12 +1347,16 @@ ${S.wallets.length ? `
 
 function walletCardHTML(w, lowBal) {
   const isLow = w.eth < lowBal;
+  const ve = walletViewEth(w);
+  const balHtml = WALLET_VIEW_CHAIN === 'ethereum'
+    ? `${(w.eth||0).toFixed(4)} ETH`
+    : `${ve==null?'…':ve.toFixed(4)+' ETH'} <span style="font-size:10px;color:var(--text3);text-transform:capitalize">on ${esc(WALLET_VIEW_CHAIN)}</span>`;
   return `<div class="wc${isLow?' low':''}" id="wcard-${esc(w.id)}">
     <input type="checkbox" class="wallet-cb" data-id="${esc(w.id)}" onchange="walletCbChange()"
       style="position:absolute;top:8px;left:8px;width:14px;height:14px;accent-color:var(--accent3);cursor:pointer;z-index:1">
     <div class="wc-addr" title="${esc(w.address||w.addr)}">${esc(w.addr)}</div>
     <div class="wc-name">${esc(w.name)}</div>
-    <div class="wc-bal">${(w.eth||0).toFixed(4)} ETH</div>
+    <div class="wc-bal">${balHtml}</div>
     <div class="wc-sub">${w.address ? w.address.slice(0,10)+'…'+w.address.slice(-8) : ''}</div>
     <div class="wc-actions">
       <span class="ct ${chainBadgeClass(w.chain)}">◆ ${esc(w.chain||'ETH')}</span>
@@ -2807,7 +2839,8 @@ function updateGasDisplay() {
 }
 
 // FUND WALLETS
-const FUND_STATE = { step:1, op:null, hub:null, sources:[], amount:'', gasPreset:'normal' };
+const FUND_STATE = { step:1, op:null, hub:null, sources:[], amount:'', gasPreset:'normal', chain:'ethereum' };
+const FUND_CHAINS = [['ethereum','Ethereum'],['robinhood','Robinhood'],['base','Base'],['blast','Blast'],['polygon','Polygon']];
 
 function renderFund() {
   const c = document.getElementById('content');
@@ -2906,6 +2939,12 @@ function renderFundStep() {
       <option value="custom">Custom</option>
     </select>
   </div>
+  <div class="fg">
+    <label class="fl">Chain</label>
+    <select class="fs" id="fund-chain" onchange="FUND_STATE.chain=this.value">
+      ${FUND_CHAINS.map(([v,l])=>`<option value="${v}"${FUND_STATE.chain===v?' selected':''}>${l}</option>`).join('')}
+    </select>
+  </div>
 </div>
 <div class="gas-calc" id="fund-calc">
   <div class="gas-row"><span class="gas-lbl">Wallets affected</span><span class="gas-val" id="fc-wallets">${srcWallets.length}</span></div>
@@ -2935,6 +2974,7 @@ function renderFundStep() {
     <tr><td style="color:var(--text2)">Wallets affected</td><td>${srcWallets.length} wallet${srcWallets.length!==1?'s':''}: ${srcWallets.map(w=>esc(w.name)).join(', ')}</td></tr>
     <tr><td style="color:var(--text2)">Amount per wallet</td><td style="font-weight:700;color:var(--green)">${amt?amt.toFixed(5)+' ETH ($'+(amt*S.ethUsd).toFixed(2)+')':'—'}</td></tr>
     <tr><td style="color:var(--text2)">Gas preset</td><td>${gwei} gwei</td></tr>
+    <tr><td style="color:var(--text2)">Chain</td><td style="text-transform:capitalize">${esc(FUND_STATE.chain||'ethereum')}</td></tr>
     <tr><td style="color:var(--text2)">Est total ETH moved</td><td style="font-weight:700;color:var(--amber)">${(amt*srcWallets.length).toFixed(5)} ETH</td></tr>
     <tr><td style="color:var(--text2)">Est gas cost</td><td>~${gasEth.toFixed(5)} ETH (~$${(gasEth*S.ethUsd).toFixed(2)})</td></tr>
   </table>
@@ -3014,6 +3054,7 @@ function fundExecute() {
     sourceIds: FUND_STATE.sources,
     amountEth: parseFloat(FUND_STATE.amount) || 0,
     gasPreset: FUND_STATE.gasPreset || 'normal',
+    chain: FUND_STATE.chain || 'ethereum',
     rpcUrls,
   };
   if (API_ONLINE) {
@@ -3044,7 +3085,8 @@ async function refreshBalances() {
 }
 
 // NFT SWEEP
-const SWEEP_STATE = { step:1, hub:null, sources:[], chain:'all', collection:null };
+const SWEEP_STATE = { step:1, hub:null, sources:[], chain:'ethereum', collection:null };
+const SWEEP_CHAINS = [['ethereum','Ethereum'],['robinhood','Robinhood'],['base','Base'],['blast','Blast'],['polygon','Polygon']];
 
 function renderSweep() {
   const c = document.getElementById('content');
@@ -3076,13 +3118,11 @@ function renderSweepStep() {
 </div>
 <div class="fg" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
   <label class="fl" style="margin:0">Source wallets</label>
-  <select class="fs" id="sweep-chain" style="width:140px" onchange="SWEEP_STATE.chain=this.value">
-    <option value="all">All chains</option>
-    <option value="ETH">Ethereum</option>
-    <option value="Base">Base</option>
-    <option value="Blast">Blast</option>
+  <select class="fs" id="sweep-chain" style="width:140px" onchange="SWEEP_STATE.chain=this.value" title="Chain to sweep on">
+    ${SWEEP_CHAINS.map(([v,l])=>`<option value="${v}"${SWEEP_STATE.chain===v?' selected':''}>${l}</option>`).join('')}
   </select>
 </div>
+<div style="font-size:10.5px;color:var(--text3);margin-bottom:6px">NFTs are discovered via OpenSea (Ethereum, Base, Blast, Polygon) or the Blockscout explorer (Robinhood), then transferred on the selected chain.</div>
 <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Checked wallets send their NFTs to the hub (each pays its own transfer gas).</div>
 <div class="w-chips" id="sweep-chips">
   ${S.wallets.map(w=>`
@@ -3123,7 +3163,7 @@ function renderSweepStep() {
     <tr><td style="color:var(--text2)">Hub (destination)</td><td style="font-weight:700">${hub?esc(hub.name+' · '+hub.addr):'—'}</td></tr>
     <tr><td style="color:var(--text2)">Source wallets</td><td>${srcWallets.length}: ${srcWallets.map(w=>esc(w.name)).join(', ')||'—'}</td></tr>
     <tr><td style="color:var(--text2)">Collection filter</td><td style="font-family:var(--mono);font-size:11px">${SWEEP_STATE.collection?esc(SWEEP_STATE.collection):'All NFTs'}</td></tr>
-    <tr><td style="color:var(--text2)">Chain filter</td><td>${SWEEP_STATE.chain==='all'?'All chains':esc(SWEEP_STATE.chain)}</td></tr>
+    <tr><td style="color:var(--text2)">Chain</td><td style="text-transform:capitalize">${esc(SWEEP_STATE.chain||'ethereum')}</td></tr>
     <tr><td style="color:var(--text2)">Max source wallets</td><td>50 max · 100 ops/hour</td></tr>
   </table>
 </div>
@@ -3170,7 +3210,7 @@ function sweepExecute() {
     hubId: SWEEP_STATE.hub,
     sourceIds: SWEEP_STATE.sources,
     collection: contractFilter,
-    chain: SWEEP_STATE.chain === 'all' ? 'ethereum' : (SWEEP_STATE.chain || 'ethereum').toLowerCase(),
+    chain: (SWEEP_STATE.chain || 'ethereum').toLowerCase(),
     gasPreset: 'normal',
     rpcUrls: S.rpcs.map(r => r.urlFull || r.url).filter(u => u.startsWith('https://')),
   };
@@ -3191,7 +3231,17 @@ function sweepExecute() {
 const NOTIFS = [];
 const CHANGELOG = [
   {
-    ver:'v2.1.0', date:'Aug 4 2026', isNew:true,
+    ver:'v2.2.0', date:'Aug 4 2026', isNew:true,
+    items:[
+      {tag:'new', text:'Wallets page chain selector — view live balances on Robinhood, Base, Blast, or Polygon without touching stored ETH balances'},
+      {tag:'new', text:'NFT Sweep on Robinhood — NFTs discovered via the Blockscout explorer and transferred on-chain (ERC-721 + ERC-1155)'},
+      {tag:'new', text:'Fund Wallets chain selector — distribute, consolidate, and split on any supported chain'},
+      {tag:'fix', text:'Sweep and Fund previously always used Ethereum RPC regardless of chain — now fully chain-aware with per-chain gas estimation'},
+      {tag:'fix', text:'Sweep failures now show the reason in Run History instead of a bare FAILED badge'},
+    ]
+  },
+  {
+    ver:'v2.1.0', date:'Aug 4 2026', isNew:false,
     items:[
       {tag:'new', text:'Copy Mint: watch target wallets on-chain and auto-replicate their NFT mints from your wallets in the same block window'},
       {tag:'new', text:'Copy Mint live feed with per-wallet tx links, recipient-risk warnings, and value caps per target'},

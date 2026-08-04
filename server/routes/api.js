@@ -86,11 +86,12 @@ router.get('/price/eth', async (req, res) => {
 
 router.get('/gas', async (req, res) => {
   try {
-    const urls = rpc.allRpcUrls();
-    if (!urls.length) return res.json({ gwei: null, usd: null });
+    const chain = rpc.normalizeChain(req.query.chain || 'ethereum');
+    const urls = rpc.allRpcUrls([], chain);
+    if (!urls.length) return res.json({ gwei: null, usd: null, chain });
     const [gwei, ethUsd] = await Promise.all([rpc.getGasPrice(urls[0]), prices.getEthUsd()]);
     const usdPer100k = (gwei * 100000 / 1e9) * ethUsd;
-    res.json({ gwei, ethUsd, usdPer100k: Math.round(usdPer100k * 100) / 100 });
+    res.json({ gwei, ethUsd, usdPer100k: Math.round(usdPer100k * 100) / 100, chain });
   } catch (e) {
     res.status(502).json({ error: e.message });
   }
@@ -223,6 +224,29 @@ router.post('/wallets/refresh', async (req, res) => {
       }));
     }
     res.json({ wallets: wallets.map(w => ({ id: w.id, eth: w.eth, low: w.low })) });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// Live per-chain balances (not persisted) — lets the UI show what each wallet
+// holds on Robinhood, Base, etc. without clobbering the stored ETH balance.
+router.post('/wallets/balances', async (req, res) => {
+  try {
+    const chain = rpc.normalizeChain(req.body?.chain || 'ethereum');
+    const urls = rpc.allRpcUrls([], chain);
+    if (!urls.length) return res.status(400).json({ error: `No RPC configured for ${chain}` });
+    const url = await rpc.getFastestUrl(urls);
+    const wallets = state().wallets.filter(w => w.address);
+    const balances = await Promise.all(wallets.map(async w => {
+      try {
+        const eth = await rpc.getBalance(url, w.address);
+        return { id: w.id, address: w.address, eth };
+      } catch {
+        return { id: w.id, address: w.address, eth: null };
+      }
+    }));
+    res.json({ chain, balances });
   } catch (e) {
     res.status(502).json({ error: e.message });
   }
@@ -530,6 +554,7 @@ router.post('/fund', taskLimiter, (req, res) => {
     hubId: String(body.hubId || ''),
     sourceIds: Array.isArray(body.sourceIds) ? body.sourceIds.slice(0, 50) : [],
     amountEth: parseFloat(body.amountEth) || 0,
+    chain: String(body.chain || 'ethereum').slice(0, 20),
     gasGwei,
     status: 'queued',
     time: new Date().toLocaleString(),

@@ -211,10 +211,12 @@ async function processSweepOp(op) {
       save();
       return;
     }
-    const { txHashes, transferred } = await sweep.runSweepOp(op, state.wallets, log);
+    const { txHashes, transferred, reasons } = await sweep.runSweepOp(op, state.wallets, log);
     op.status = transferred > 0 ? 'completed' : 'failed';
     op.txHashes = txHashes;
-    op.note = transferred > 0 ? `${transferred} NFT(s) swept` : 'No NFTs transferred';
+    op.note = transferred > 0
+      ? `${transferred} NFT(s) swept`
+      : `No NFTs transferred${reasons?.length ? ` — ${reasons[0]}` : ''}`;
     await finishRun({
       id: `run_${Date.now()}`, type: 'sweep', drop: 'NFT sweep', route: 'SWEEP',
       wallets: op.sourceIds?.length || 0, time: new Date().toLocaleString(),
@@ -225,7 +227,13 @@ async function processSweepOp(op) {
   } catch (e) {
     op.status = 'failed';
     op.error = e.message;
+    op.note = e.message.slice(0, 140);
     log('err', e.message);
+    await finishRun({
+      id: `run_${Date.now()}`, type: 'sweep', drop: 'NFT sweep', route: 'SWEEP',
+      wallets: op.sourceIds?.length || 0, time: new Date().toLocaleString(),
+      status: 'failed', minted: 0, txHash: null, note: op.note,
+    });
   }
   save();
 }

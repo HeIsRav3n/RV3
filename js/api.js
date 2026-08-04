@@ -149,6 +149,13 @@ const RV3_API = {
     return this.request('/wallets/refresh', { method: 'POST', body: '{}' });
   },
 
+  // Live balances on a specific chain (robinhood, base, …) — not persisted.
+  async walletBalances(chain) {
+    return this.request('/wallets/balances', {
+      method: 'POST', body: JSON.stringify({ chain }),
+    });
+  },
+
   async createFundOp(op) {
     return this.request('/fund', { method: 'POST', body: JSON.stringify(op) });
   },

@@ -1,6 +1,6 @@
 {
   "name": "rv3-mint-bot",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "description": "RV3 personal NFT mint bot — UI + API worker",
   "main": "server/index.js",
