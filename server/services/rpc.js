@@ -80,6 +80,26 @@ function decodeRevertReason(hexData) {
   return null;
 }
 
+async function estimateGas(url, { from, to, data, value }, timeout = 6000) {
+  const hexValue = value != null ? '0x' + BigInt(value).toString(16) : '0x0';
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Connection: 'keep-alive' },
+    body: JSON.stringify({
+      jsonrpc: '2.0', id: 1, method: 'eth_estimateGas',
+      params: [{ from, to, data: data || '0x', value: hexValue }],
+    }),
+    signal: AbortSignal.timeout(timeout),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const j = await res.json();
+  if (j.error) {
+    const reason = decodeRevertReason(j.error.data) || j.error.message || 'execution reverted';
+    throw new Error(reason);
+  }
+  return BigInt(j.result);
+}
+
 async function simulateCall(url, from, to, data, value = '0x0') {
   const res = await fetch(url, {
     method: 'POST',
@@ -169,8 +189,10 @@ function publicRpc(chainSlug) {
 
 function getPrivateRpc(chainSlug = 'ethereum') {
   const chain = normalizeChain(chainSlug);
-  return config.envRpcs.find(r => r.role === 'Private' && r.chain === chain)
-    || config.envRpcs.find(r => r.role === 'Private');
+  // Chain-specific only. Do NOT fall back to another chain's private relay —
+  // e.g. the Ethereum Flashbots endpoint must never be used for a Base/Robinhood
+  // transaction, which would broadcast to the wrong network.
+  return config.envRpcs.find(r => r.role === 'Private' && r.chain === chain) || null;
 }
 
 function allRpcUrls(extra = [], chainSlug = 'ethereum') {
@@ -212,6 +234,6 @@ function maskUrl(url) {
 
 module.exports = {
   ping, prewarmUrls, getFastestUrl, getBlockNumber, getBalance, getGasPrice,
-  simulateCall, batchCall, getWalletNonceAndChain, allRpcUrls, getPrivateRpc,
+  simulateCall, estimateGas, batchCall, getWalletNonceAndChain, allRpcUrls, getPrivateRpc,
   normalizeChain, maskUrl, publicRpc,
 };

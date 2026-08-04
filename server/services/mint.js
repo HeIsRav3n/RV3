@@ -26,7 +26,12 @@ async function executeMintForWallet(walletEntry, task, log) {
   const minter = await signer.getAddress();
 
   const blast = task.rpcBlast !== false;
-  const sendUrls = tx.pickSendUrls(task.route, task.rpcUrls || [], chainSlug);
+  // Flashbots relay/bundle are Ethereum-only — downgrade to direct RPC on any
+  // other chain so the tx is never sent to the Ethereum relay/builders.
+  const effRoute = chainSlug === 'ethereum'
+    ? routes.normalizeRoute(task.route)
+    : routes.ROUTES.DIRECT_RPC;
+  const sendUrls = tx.pickSendUrls(effRoute, task.rpcUrls || [], chainSlug);
   if (!sendUrls.length) throw new Error('No RPC available');
 
   const fastest = await rpc.getFastestUrl(sendUrls);
@@ -47,7 +52,7 @@ async function executeMintForWallet(walletEntry, task, log) {
     log('info', `${walletEntry.name} — T1 pre-signed blast`);
     try {
       const hash = await tx.broadcastRaw(preSigned, sendUrls, {
-        blast, route: routes.normalizeRoute(task.route), targetBlock: task.targetBlock,
+        blast, route: effRoute, targetBlock: task.targetBlock,
       });
       const broadcastMs = Date.now() - start;
       log('ok', `${walletEntry.name} — ${hash.slice(0, 14)}… in ${broadcastMs}ms [T1]`);
@@ -83,7 +88,7 @@ async function executeMintForWallet(walletEntry, task, log) {
 
   const signMs = Date.now() - start;
   const hash = await tx.broadcastRaw(signed, sendUrls, {
-    blast, route: routes.normalizeRoute(task.route), targetBlock: task.targetBlock,
+    blast, route: effRoute, targetBlock: task.targetBlock,
   });
   const broadcastMs = Date.now() - start;
 

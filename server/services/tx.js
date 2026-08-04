@@ -16,6 +16,11 @@ function gweiFromPreset(preset, custom) {
 function pickSendUrls(route, extra = [], chainSlug = 'ethereum') {
   const normalized = routes.normalizeRoute(route);
   const all = rpc.allRpcUrls(extra, chainSlug);
+
+  // Flashbots relay + builder fan-out are Ethereum-mainnet only. On any other
+  // chain (Base, Blast, Polygon, Robinhood) fall back to direct RPC broadcast.
+  if (rpc.normalizeChain(chainSlug) !== 'ethereum') return all;
+
   const privateRpc = rpc.getPrivateRpc(chainSlug);
 
   if (normalized === routes.ROUTES.FB_PROTECT) {

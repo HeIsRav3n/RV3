@@ -277,7 +277,14 @@ async function replicateMint(target, mint, wallets) {
     return { sent: 0 };
   }
 
-  const sendUrls = tx.pickSendUrls(target.route, [], chainSlug);
+  // Flashbots relay/bundle only exist on Ethereum mainnet — force direct RPC
+  // broadcast on every other chain so we never route a Base/Robinhood tx to
+  // the Ethereum Flashbots relay.
+  const effRoute = chainSlug === 'ethereum'
+    ? routes.normalizeRoute(target.route)
+    : routes.ROUTES.DIRECT_RPC;
+
+  const sendUrls = tx.pickSendUrls(effRoute, [], chainSlug);
   if (!sendUrls.length) {
     pushFeed({
       type: 'detect', status: 'failed', targetLabel: target.label, targetAddress: target.address,
@@ -308,12 +315,26 @@ async function replicateMint(target, mint, wallets) {
 
   const results = await Promise.allSettled(selected.map(async w => {
     const signer = new ethers.Wallet(decrypt(w.encryptedKey));
+    const from = w.address || await signer.getAddress();
+
+    // Preflight: estimate gas from THIS wallet. This validates the mint won't
+    // revert (sold out / not eligible / wrong recipient) AND yields a correct
+    // gas limit — critical on Arbitrum-stack chains like Robinhood where a flat
+    // limit under-provisions the L1 data component. Falls back to a safe floor.
+    let gasLimit = GAS_LIMIT;
+    try {
+      const est = await rpc.estimateGas(fastest, { from, to: mint.to, data: mint.data, value });
+      gasLimit = (est * 13n) / 10n;                 // +30% headroom
+      if (gasLimit < 150000n) gasLimit = 150000n;   // floor
+      if (gasLimit > 5000000n) gasLimit = 5000000n; // sanity cap
+    } catch (e) {
+      throw new Error(`preflight revert: ${(e.message || 'reverted').slice(0, 90)}`);
+    }
+
     const { signed } = await tx.buildAndSign(signer, {
-      to: mint.to, data: mint.data, value, gasLimit: GAS_LIMIT,
+      to: mint.to, data: mint.data, value, gasLimit,
     }, { rpcUrl: fastest, gasGwei });
-    const hash = await tx.broadcastRaw(signed, sendUrls, {
-      blast: true, route: routes.normalizeRoute(target.route),
-    });
+    const hash = await tx.broadcastRaw(signed, sendUrls, { blast: true, route: effRoute });
     return { wallet: w.name, walletId: w.id, hash };
   }));
 
