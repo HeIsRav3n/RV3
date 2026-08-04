@@ -37,11 +37,12 @@ function chainSlug(chain) {
   if (c === 'base') return 'base';
   if (c === 'blast') return 'blast';
   if (c === 'polygon' || c === 'matic') return 'polygon';
+  if (c === 'robinhood' || c === 'rh' || c === 'robinhood-chain') return 'robinhood';
   return 'ethereum';
 }
 
 function displayChain(slug) {
-  const map = { ethereum: 'Ethereum', base: 'Base', blast: 'Blast', polygon: 'Polygon' };
+  const map = { ethereum: 'Ethereum', base: 'Base', blast: 'Blast', polygon: 'Polygon', robinhood: 'Robinhood' };
   return map[slug] || 'Ethereum';
 }
 

@@ -1698,7 +1698,7 @@ async function taskPrewarm(id) {
 // ── DELEGATION ──
 // ── COPY MINT ──
 let _cmPollTimer = null;
-const CM_CHAINS = { ethereum: 'Ethereum', base: 'Base', blast: 'Blast', polygon: 'Polygon' };
+const CM_CHAINS = { ethereum: 'Ethereum', base: 'Base', blast: 'Blast', polygon: 'Polygon', robinhood: 'Robinhood' };
 
 function renderCopyMint() {
   const c = document.getElementById('content');
@@ -1801,7 +1801,7 @@ function cmTargetsHTML() {
 function cmFeedHTML() {
   const feed = S.copymint.feed || [];
   if (!feed.length) return `<div class="es"><div class="es-icon">◷</div><div class="es-title">No activity yet</div><div class="es-sub">Detected mints and copies appear here in real time</div></div>`;
-  const chainExplorer = { ethereum: 'https://etherscan.io/tx/', base: 'https://basescan.org/tx/', blast: 'https://blastscan.io/tx/', polygon: 'https://polygonscan.com/tx/' };
+  const chainExplorer = { ethereum: 'https://etherscan.io/tx/', base: 'https://basescan.org/tx/', blast: 'https://blastscan.io/tx/', polygon: 'https://polygonscan.com/tx/', robinhood: 'https://robinhoodchain.blockscout.com/tx/' };
   return feed.map(f => {
     const color = f.status === 'copied' ? 'var(--green)' : f.status === 'failed' ? 'var(--red)' : f.status === 'simulated' ? 'var(--accent3)' : 'var(--amber)';
     const exp = chainExplorer[f.chain] || 'https://etherscan.io/tx/';
@@ -3355,7 +3355,7 @@ function renderGuide() {
 <h4>Setup</h4>
 <ul>
   <li><strong>Target address</strong> — the wallet you want to shadow (a known alpha/whale minter).</li>
-  <li><strong>Chain</strong> — Ethereum, Base, Blast, or Polygon. Requires the matching RPC in Settings/env.</li>
+  <li><strong>Chain</strong> — Ethereum, Base, Blast, Polygon, or Robinhood Chain. Requires the matching RPC in env (Robinhood falls back to its public endpoint automatically).</li>
   <li><strong>Wallets</strong> — pick which of your imported wallets fire the copy (leave empty to use the first).</li>
   <li><strong>Max mint value</strong> — optional per-mint ETH cap so you never blindly copy an expensive buy.</li>
 </ul>

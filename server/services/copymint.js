@@ -36,7 +36,10 @@ const ERC1155_SINGLE = ethers.id('TransferSingle(address,address,address,uint256
 const ERC1155_BATCH = ethers.id('TransferBatch(address,address,address,uint256[],uint256[])');
 const ZERO_TOPIC = '0x' + '0'.repeat(64);
 const GAS_LIMIT = 400000n;
-const MAX_BLOCKS_PER_SCAN = 25;
+// High enough that fast L2s (e.g. Robinhood ~100ms blocks → ~40 blocks/4s scan)
+// don't skip blocks between scans. getLogs is topic-filtered to watched
+// addresses, so a wide range still returns very few logs.
+const MAX_BLOCKS_PER_SCAN = 60;
 const FEED_LIMIT = 80;
 const SEEN_TX_LIMIT = 300;
 

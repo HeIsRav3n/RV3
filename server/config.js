@@ -39,6 +39,8 @@ const config = {
     pickRpc('BASE_RPC_BLAST_1', 'Blast', 'base'),
     pickRpc('POLYGON_RPC_PRIMARY', 'Primary', 'polygon'),
     pickRpc('BLAST_RPC_PRIMARY', 'Primary', 'blast'),
+    pickRpc('ROBINHOOD_RPC_PRIMARY', 'Primary', 'robinhood'),
+    pickRpc('ROBINHOOD_RPC_BLAST_1', 'Blast', 'robinhood'),
   ].filter(Boolean),
   builderRpcs: [
     pickBuilder('ETH_BUILDER_TITAN'),

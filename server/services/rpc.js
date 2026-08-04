@@ -153,7 +153,18 @@ function normalizeChain(chain) {
   if (c === 'base') return 'base';
   if (c === 'blast') return 'blast';
   if (c === 'polygon' || c === 'matic') return 'polygon';
+  if (c === 'robinhood' || c === 'rh' || c === 'robinhood-chain' || c === '4663') return 'robinhood';
   return 'ethereum';
+}
+
+// Public fallback RPC per chain — used when no env RPC is configured for that
+// chain (best-effort; rate-limited public endpoints, fine for reads/copy-mint).
+const PUBLIC_RPC = {
+  robinhood: 'https://rpc.mainnet.chain.robinhood.com',
+};
+
+function publicRpc(chainSlug) {
+  return PUBLIC_RPC[normalizeChain(chainSlug)] || null;
 }
 
 function getPrivateRpc(chainSlug = 'ethereum') {
@@ -169,7 +180,11 @@ function allRpcUrls(extra = [], chainSlug = 'ethereum') {
     if (r.chain === chain) urls.add(r.url);
   }
   if (!urls.size) {
-    for (const r of config.envRpcs) urls.add(r.url);
+    // Prefer a chain-specific public fallback (e.g. Robinhood) over borrowing
+    // another chain's endpoints, which would broadcast to the wrong network.
+    const pub = publicRpc(chain);
+    if (pub) urls.add(pub);
+    else for (const r of config.envRpcs) urls.add(r.url);
   }
   for (const r of extra) {
     const url = typeof r === 'string' ? r : r?.url;
@@ -193,5 +208,5 @@ function maskUrl(url) {
 module.exports = {
   ping, prewarmUrls, getFastestUrl, getBlockNumber, getBalance, getGasPrice,
   simulateCall, batchCall, getWalletNonceAndChain, allRpcUrls, getPrivateRpc,
-  normalizeChain, maskUrl,
+  normalizeChain, maskUrl, publicRpc,
 };
