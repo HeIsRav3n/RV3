@@ -13,6 +13,7 @@ const routes = require('./routes');
 const prices = require('./prices');
 const walletStore = require('./wallets');
 const prewarm = require('./prewarm');
+const copymint = require('./copymint');
 
 let running = false;
 let state = store.load();
@@ -271,7 +272,9 @@ async function start() {
   }
   setInterval(tick, config.workerTickMs || 200);
   setInterval(() => { refreshWalletBalances().catch(() => {}); }, 60000);
-  store.appendLog(state, 'info', 'RV3 worker started (mint · fund · sweep)');
+  // Copy Mint watcher — self-manages its own scan interval based on active targets.
+  copymint.start().catch(e => store.appendLog(state, 'err', `copymint.start: ${e.message}`));
+  store.appendLog(state, 'info', 'RV3 worker started (mint · fund · sweep · copymint)');
   save();
 }
 

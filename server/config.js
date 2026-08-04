@@ -47,6 +47,7 @@ const config = {
     pickBuilder('ETH_BUILDER_FLASHBOTS'),
   ].filter(Boolean),
   workerTickMs: parseInt(process.env.WORKER_TICK_MS || '200', 10),
+  copymintScanMs: parseInt(process.env.COPYMINT_SCAN_MS || '4000', 10),
 };
 
 config.hasWalletEncryption = config.walletEncryptionKey.length === 64 && /^[0-9a-fA-F]+$/.test(config.walletEncryptionKey);

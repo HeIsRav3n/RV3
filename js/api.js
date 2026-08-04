@@ -160,4 +160,31 @@ const RV3_API = {
   async pnl() {
     return this.request('/pnl');
   },
+
+  // ── Copy Mint ──
+  async copymintList() {
+    return this.request('/copymint');
+  },
+
+  async copymintFeed() {
+    return this.request('/copymint/feed');
+  },
+
+  async copymintAdd(target) {
+    return this.request('/copymint', { method: 'POST', body: JSON.stringify(target) });
+  },
+
+  async copymintToggle(id, active) {
+    return this.request(`/copymint/${encodeURIComponent(id)}/toggle`, {
+      method: 'POST', body: JSON.stringify({ active }),
+    });
+  },
+
+  async copymintScan() {
+    return this.request('/copymint/scan', { method: 'POST', body: '{}' });
+  },
+
+  async copymintRemove(id) {
+    return this.request(`/copymint/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
 };

@@ -517,6 +517,11 @@ code{background:var(--bg4);padding:1px 5px;border-radius:4px;font-size:11px;font
       <span class="ni-label">Tasks</span>
       <span class="ni-b nb-g" id="nb-tasks" style="display:none">0</span>
     </div>
+    <div class="ni" id="nav-copymint" onclick="go('copymint')" role="button" title="Copy Mint">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      <span class="ni-label">Copy Mint</span>
+      <span class="ni-b nb-g" id="nb-copymint" style="display:none">0</span>
+    </div>
     <div class="ni" id="nav-fund" onclick="go('fund')" role="button" title="Fund Wallets">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
       <span class="ni-label">Fund Wallets</span>
@@ -846,6 +851,7 @@ const S = {
   },
   blastActive: false,
   countdownInterval: null,
+  copymint: { targets: [], feed: [], status: null },
 };
 
 // gas presets (gwei)
@@ -942,7 +948,7 @@ function loadState() {
 }
 
 // ROUTER
-const PAGES = new Set(['overview','drops','wallets','tasks','deleg','history','pnl','settings','fund','sweep','guide']);
+const PAGES = new Set(['overview','drops','wallets','tasks','copymint','deleg','history','pnl','settings','fund','sweep','guide']);
 function go(page) {
   if(page === 'detector') page = 'drops';
   if(!PAGES.has(page)) return;
@@ -952,13 +958,14 @@ function go(page) {
   const renders = {
     overview: renderOverview,
     wallets: renderWallets, drops: renderDrops, tasks: renderTasks,
+    copymint: renderCopyMint,
     deleg: renderDeleg, history: renderHistory, pnl: renderPnl,
     settings: renderSettings, fund: renderFund, sweep: renderSweep,
     guide: renderGuide
   };
   const titles = {
     overview:'Overview', wallets:'Wallets',
-    drops:'Drops', tasks:'Tasks', deleg:'Delegation', history:'Run History',
+    drops:'Drops', tasks:'Tasks', copymint:'Copy Mint', deleg:'Delegation', history:'Run History',
     pnl:'PnL', settings:'Settings', fund:'Fund Wallets', sweep:'NFT Sweep',
     guide:'User Guide'
   };
@@ -1689,6 +1696,210 @@ async function taskPrewarm(id) {
 }
 
 // ── DELEGATION ──
+// ── COPY MINT ──
+let _cmPollTimer = null;
+const CM_CHAINS = { ethereum: 'Ethereum', base: 'Base', blast: 'Blast', polygon: 'Polygon' };
+
+function renderCopyMint() {
+  const c = document.getElementById('content');
+  document.getElementById('tba').innerHTML = `
+    <button class="btn btn-sm" onclick="cmScan()" title="Scan recent blocks now">⟳ Scan now</button>`;
+
+  if (!API_ONLINE) {
+    c.innerHTML = `<div class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt">Copy Mint needs the backend online. Run <code>npm start</code> and ensure you're logged in.</div></div>`;
+    return;
+  }
+
+  const walletOpts = S.wallets.length
+    ? S.wallets.map(w => `<label class="cm-wsel"><input type="checkbox" value="${esc(w.id)}" class="cm-w-cb"> ${esc(w.name)} <span style="color:var(--text3)">${esc(w.addr || '')}</span></label>`).join('')
+    : '<div style="color:var(--text3);font-size:12px">No wallets with server keys — import in Wallets first.</div>';
+
+  const st = S.copymint.status;
+  const statusPill = st
+    ? `<span class="cm-dot ${st.watching ? 'on' : 'off'}"></span>${st.watching ? 'Watching' : 'Idle'} · ${st.active}/${st.targets} active${st.liveMint ? '' : ' · <span style="color:var(--amber)">preflight only</span>'}`
+    : 'Connecting…';
+
+  c.innerHTML = `
+<div class="card"><div class="card-hd"><h2>How copy mint works</h2></div>
+<div class="card-body" style="font-size:12.5px;line-height:1.85;color:var(--text2)">
+  RV3 watches each target wallet on-chain. When the target mints an NFT (Transfer from <code>0x0</code>), RV3 grabs their exact mint transaction and replays the same calldata from <b>your</b> wallets in the same block window.<br><br>
+  <span style="color:var(--amber)">Note:</span> most mints (<code>mint(qty)</code>, SeaDrop <code>mintPublic</code>) mint to <code>msg.sender</code>, so the copy lands on your wallet. If a contract encodes the recipient inside calldata, RV3 flags it in the feed as a recipient risk.
+</div></div>
+
+<div class="card">
+  <div class="card-hd"><h2>Add target wallet</h2><div style="font-size:11px">${statusPill}</div></div>
+  <div class="card-body">
+    <div class="frow">
+      <div class="fg" style="flex:2"><label class="fl">Target address</label><input class="fi" id="cm-addr" placeholder="0x… wallet to copy" spellcheck="false"></div>
+      <div class="fg"><label class="fl">Label</label><input class="fi" id="cm-label" placeholder="e.g. Whale #1"></div>
+      <div class="fg"><label class="fl">Chain</label>
+        <select class="fs" id="cm-chain">${Object.entries(CM_CHAINS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
+      </div>
+    </div>
+    <div class="frow">
+      <div class="fg"><label class="fl">Inclusion route</label>
+        <select class="fs" id="cm-route">
+          <option value="direct_rpc">Direct RPC</option>
+          <option value="public">Public mempool</option>
+          <option value="fb_protect">Flashbots Protect</option>
+          <option value="fb_bundle">Flashbots bundle</option>
+        </select>
+      </div>
+      <div class="fg"><label class="fl">Gas preset</label>
+        <select class="fs" id="cm-gas">
+          <option value="normal">Normal: 7 gwei</option>
+          <option value="fast" selected>Fast: 15 gwei</option>
+          <option value="turbo">Turbo: 25 gwei</option>
+        </select>
+      </div>
+      <div class="fg"><label class="fl">Qty</label><input class="fi" id="cm-qty" type="number" min="1" max="10" value="1"></div>
+      <div class="fg"><label class="fl">Max mint value (ETH, optional)</label><input class="fi" id="cm-maxval" type="number" min="0" step="0.001" placeholder="e.g. 0.1"></div>
+    </div>
+    <div class="fg"><label class="fl">Copy with these wallets <span style="color:var(--text3)">(none = first wallet)</span></label>
+      <div class="cm-wallets">${walletOpts}</div>
+    </div>
+    <button class="btn btn-p" onclick="cmAdd()">Start watching</button>
+  </div>
+</div>
+
+<div class="section-lbl">Watched targets</div>
+<div class="card" id="cm-targets">${cmTargetsHTML()}</div>
+
+<div class="section-lbl">Live feed</div>
+<div class="card" id="cm-feed">${cmFeedHTML()}</div>
+
+<style>
+.cm-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.cm-dot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
+.cm-dot.off{background:var(--text3)}
+.cm-wallets{display:flex;flex-wrap:wrap;gap:8px;max-height:120px;overflow:auto;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px}
+.cm-wsel{display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;white-space:nowrap}
+</style>`;
+
+  cmStartPolling();
+}
+
+function cmTargetsHTML() {
+  const targets = S.copymint.targets || [];
+  if (!targets.length) return `<div class="es"><div class="es-icon">◎</div><div class="es-title">No targets watched</div><div class="es-sub">Add a wallet above to start copying its mints</div></div>`;
+  return targets.map(t => {
+    const s = t.stats || {};
+    return `
+  <div class="rr">
+    <div class="rd" style="background:${t.active ? 'var(--green)' : 'var(--text3)'}"></div>
+    <div class="ri">
+      <div class="rn">${esc(t.label)} <span style="font-size:10px;color:var(--text3);font-family:var(--mono)">${esc(t.address.slice(0,10))}…${esc(t.address.slice(-6))}</span></div>
+      <div class="rm">${esc(CM_CHAINS[t.chainSlug] || t.chainSlug)} · ${esc(fmtRoute(t.route))} · ${t.walletIds?.length ? t.walletIds.length + ' wallet(s)' : 'wallet #1'} · qty ${t.qty} · ${t.gasGwei}gwei</div>
+      <div class="rm" style="color:var(--text3)">detected ${s.detected || 0} · copied ${s.replicated || 0}${s.lastDetectedAt ? ' · last ' + new Date(s.lastDetectedAt).toLocaleString() : ''}</div>
+    </div>
+    <button class="btn btn-xs" onclick="cmToggle('${esc(t.id)}', ${!t.active})">${t.active ? 'Pause' : 'Resume'}</button>
+    <button class="btn btn-r btn-xs" onclick="cmRemove('${esc(t.id)}')">✕</button>
+  </div>`;
+  }).join('');
+}
+
+function cmFeedHTML() {
+  const feed = S.copymint.feed || [];
+  if (!feed.length) return `<div class="es"><div class="es-icon">◷</div><div class="es-title">No activity yet</div><div class="es-sub">Detected mints and copies appear here in real time</div></div>`;
+  const chainExplorer = { ethereum: 'https://etherscan.io/tx/', base: 'https://basescan.org/tx/', blast: 'https://blastscan.io/tx/', polygon: 'https://polygonscan.com/tx/' };
+  return feed.map(f => {
+    const color = f.status === 'copied' ? 'var(--green)' : f.status === 'failed' ? 'var(--red)' : f.status === 'simulated' ? 'var(--accent3)' : 'var(--amber)';
+    const exp = chainExplorer[f.chain] || 'https://etherscan.io/tx/';
+    const srcLink = f.mintTxHash ? `<a href="${exp}${f.mintTxHash}" target="_blank" rel="noopener" style="color:#60a5fa;text-decoration:none">↗ src ${esc(f.mintTxHash.slice(0,10))}…</a>` : '';
+    const copies = (f.replicated || []).map(r => r.ok
+      ? `<a href="${exp}${r.hash}" target="_blank" rel="noopener" style="color:var(--green);text-decoration:none">↗ ${esc(r.wallet)}</a>`
+      : `<span style="color:var(--red)" title="${esc(r.error || '')}">✗ ${esc(r.wallet)}</span>`).join(' · ');
+    return `
+  <div class="rr">
+    <div class="rd" style="background:${color}"></div>
+    <div class="ri">
+      <div class="rn">${esc(f.targetLabel || 'Target')} <span class="st st-${f.status === 'copied' ? 'ok' : f.status === 'failed' ? 'fail' : 'part'}" style="margin-left:6px">${esc((f.status||'').toUpperCase())}</span></div>
+      <div class="rm">${esc(f.std || '')} ${f.contract ? '· ' + esc(f.contract.slice(0,10)) + '…' : ''} ${f.valueEth && f.valueEth !== '0' ? '· ' + esc(f.valueEth) + ' ETH' : ''} · ${srcLink}</div>
+      ${copies ? `<div class="rm">copies: ${copies}</div>` : ''}
+      ${f.note ? `<div class="rm" style="color:${f.recipientRisk ? 'var(--amber)' : 'var(--text3)'}">${esc(f.note)}</div>` : ''}
+    </div>
+    <div style="font-size:10px;color:var(--text3);font-family:var(--mono)">${new Date(f.at).toLocaleTimeString()}</div>
+  </div>`;
+  }).join('');
+}
+
+async function cmRefresh() {
+  try {
+    const data = await RV3_API.copymintList();
+    S.copymint.targets = data.targets || [];
+    S.copymint.feed = data.feed || [];
+    S.copymint.status = data.status || null;
+    const tEl = document.getElementById('cm-targets');
+    const fEl = document.getElementById('cm-feed');
+    if (tEl) tEl.innerHTML = cmTargetsHTML();
+    if (fEl) fEl.innerHTML = cmFeedHTML();
+    const badge = document.getElementById('nb-copymint');
+    if (badge) {
+      const n = (S.copymint.status?.active) || 0;
+      badge.textContent = n;
+      badge.style.display = n ? 'block' : 'none';
+    }
+  } catch { /* offline — poller will retry */ }
+}
+
+function cmStartPolling() {
+  cmRefresh();
+  if (_cmPollTimer) clearInterval(_cmPollTimer);
+  _cmPollTimer = setInterval(() => {
+    if (!document.getElementById('nav-copymint')?.classList.contains('act')) {
+      clearInterval(_cmPollTimer); _cmPollTimer = null; return;
+    }
+    cmRefresh();
+  }, 5000);
+}
+
+async function cmAdd() {
+  const address = document.getElementById('cm-addr')?.value.trim();
+  if (!/^0x[a-fA-F0-9]{40}$/.test(address || '')) return toast('Enter a valid 0x address', '⚠');
+  const walletIds = Array.from(document.querySelectorAll('.cm-w-cb:checked')).map(cb => cb.value);
+  const maxRaw = document.getElementById('cm-maxval')?.value;
+  const target = {
+    address,
+    label: document.getElementById('cm-label')?.value.trim() || 'Target',
+    chainSlug: document.getElementById('cm-chain')?.value || 'ethereum',
+    route: document.getElementById('cm-route')?.value || 'direct_rpc',
+    gasPreset: document.getElementById('cm-gas')?.value || 'fast',
+    qty: parseInt(document.getElementById('cm-qty')?.value, 10) || 1,
+    walletIds,
+    maxValueEth: maxRaw ? parseFloat(maxRaw) : null,
+  };
+  try {
+    await RV3_API.copymintAdd(target);
+    toast('Now watching ' + target.label, '✓');
+    addNotif('Copy Mint', `Watching ${target.label} (${address.slice(0,10)}…)`, 'info');
+    document.getElementById('cm-addr').value = '';
+    document.getElementById('cm-label').value = '';
+    await cmRefresh();
+  } catch (e) {
+    toast(e.message, '⚠');
+  }
+}
+
+async function cmToggle(id, active) {
+  try { await RV3_API.copymintToggle(id, active); await cmRefresh(); }
+  catch (e) { toast(e.message, '⚠'); }
+}
+
+async function cmRemove(id) {
+  if (!confirm('Stop watching this target?')) return;
+  try { await RV3_API.copymintRemove(id); await cmRefresh(); }
+  catch (e) { toast(e.message, '⚠'); }
+}
+
+async function cmScan() {
+  try {
+    toast('Scanning recent blocks…', '⟳');
+    await RV3_API.copymintScan();
+    await cmRefresh();
+    toast('Scan complete', '✓');
+  } catch (e) { toast(e.message, '⚠'); }
+}
+
 function renderDeleg() {
   const c = document.getElementById('content');
   c.innerHTML = `
@@ -2969,7 +3180,16 @@ function sweepExecute() {
 const NOTIFS = [];
 const CHANGELOG = [
   {
-    ver:'v1.5.0', date:'Jun 17 2026', isNew:true,
+    ver:'v2.1.0', date:'Aug 4 2026', isNew:true,
+    items:[
+      {tag:'new', text:'Copy Mint: watch target wallets on-chain and auto-replicate their NFT mints from your wallets in the same block window'},
+      {tag:'new', text:'Copy Mint live feed with per-wallet tx links, recipient-risk warnings, and value caps per target'},
+      {tag:'fix', text:'Auth now auto-creates users/sessions tables on a fresh Postgres/Neon DB — no manual SQL needed'},
+      {tag:'fix', text:'Version now sourced from package.json across server, health, and UI (was hardcoded)'},
+    ]
+  },
+  {
+    ver:'v1.5.0', date:'Jun 17 2026', isNew:false,
     items:[
       {tag:'fix', text:'allRpcUrls() now handles both string and object formats — custom UI RPC endpoints were silently ignored in all mint/fund/sweep operations'},
       {tag:'fix', text:'walletDelete now calls server API — previously deleted wallets re-appeared after next sync'},
@@ -3126,6 +3346,21 @@ function renderGuide() {
 <div class="guide-step"><div class="guide-step-num">3</div><div class="guide-step-body"><div class="guide-step-title">Detect a contract</div><div class="guide-step-desc">Detector → paste a contract address or collection URL from OpenSea, Magic Eden, Blur, Manifold, or Thirdweb. RV3 reads the standard, phases, price, and wallet eligibility.</div></div></div>
 <div class="guide-step"><div class="guide-step-num">4</div><div class="guide-step-body"><div class="guide-step-title">Create a mint task</div><div class="guide-step-desc">Add the detected drop to Drops, then click Mint. Select phase, wallets, gas preset, and route. RV3 simulates the transaction before broadcast — if it would revert, no gas is spent.</div></div></div>
 <div class="guide-step"><div class="guide-step-num">5</div><div class="guide-step-body"><div class="guide-step-title">Monitor execution</div><div class="guide-step-desc">Tasks appear in the Tasks page with live status. Confirmation speed (ms) is displayed after each run. The sidebar notification panel logs results in real time.</div></div></div>`
+    },
+    {
+      icon: '⧉',
+      title: 'Copy Mint',
+      body: `<h4>What it does</h4>
+<p>Copy Mint watches one or more target wallets on-chain. The moment a target mints an NFT, RV3 reads their exact mint transaction and replays the same calldata from <strong>your</strong> wallets — landing in the same or next block.</p>
+<h4>Setup</h4>
+<ul>
+  <li><strong>Target address</strong> — the wallet you want to shadow (a known alpha/whale minter).</li>
+  <li><strong>Chain</strong> — Ethereum, Base, Blast, or Polygon. Requires the matching RPC in Settings/env.</li>
+  <li><strong>Wallets</strong> — pick which of your imported wallets fire the copy (leave empty to use the first).</li>
+  <li><strong>Max mint value</strong> — optional per-mint ETH cap so you never blindly copy an expensive buy.</li>
+</ul>
+<h4>Recipient note</h4>
+<p>Most mints (<code>mint(qty)</code>, SeaDrop <code>mintPublic</code>) send the NFT to <code>msg.sender</code>, so the copy lands on your wallet. If a contract hardcodes the recipient in calldata, RV3 flags a <strong>recipient risk</strong> in the feed. Enable <code>ENABLE_LIVE_MINT=true</code> to actually send copies — otherwise detections are logged in preflight-only mode.</p>`
     },
     {
       icon: '◎',

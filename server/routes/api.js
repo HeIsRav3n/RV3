@@ -20,6 +20,7 @@ const routes = require('../services/routes');
 const mint = require('../services/mint');
 const receipt = require('../services/receipt');
 const gql = require('../services/gql');
+const copymint = require('../services/copymint');
 
 const router = express.Router();
 
@@ -53,7 +54,7 @@ router.get('/health', (req, res) => {
       walletEncryption: config.hasWalletEncryption,
       liveMint: config.enableLiveMint,
     },
-    version: '2.0.0',
+    version: require('../../package.json').version,
   });
 });
 
@@ -587,6 +588,57 @@ router.get('/pnl', async (req, res) => {
     res.json({ runs: enriched, summary: { totalGasUsd: totalGas, totalMinted, ethUsd } });
   } catch (e) {
     res.status(502).json({ error: e.message });
+  }
+});
+
+// ── Copy Mint ────────────────────────────────────────────────────────────────
+
+router.get('/copymint', (req, res) => {
+  res.json({
+    targets: copymint.listTargets(),
+    feed: copymint.getFeed(),
+    status: copymint.getStatus(),
+  });
+});
+
+router.get('/copymint/feed', (req, res) => {
+  res.json({ feed: copymint.getFeed(), status: copymint.getStatus() });
+});
+
+router.post('/copymint', taskLimiter, async (req, res) => {
+  try {
+    const target = await copymint.addTarget(req.body || {});
+    store.appendLog(state(), 'info', `Copy-mint watching ${target.label} (${target.address})`);
+    res.json({ target });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post('/copymint/:id/toggle', async (req, res) => {
+  try {
+    const target = await copymint.toggleTarget(req.params.id, req.body?.active);
+    res.json({ target });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post('/copymint/scan', async (req, res) => {
+  try {
+    await copymint.scanOnce();
+    res.json({ ok: true, status: copymint.getStatus() });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.delete('/copymint/:id', async (req, res) => {
+  try {
+    await copymint.removeTarget(req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 

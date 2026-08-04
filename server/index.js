@@ -41,7 +41,7 @@ worker.start();
 
 if (require.main === module) {
   app.listen(config.port, () => {
-    const v = '2.0.0';
+    const v = require('../package.json').version;
     console.log(`\n  RV3 Mint Bot  v${v}`);
     console.log(`  ${'─'.repeat(36)}`);
     console.log(`  UI        →  http://localhost:${config.port}`);

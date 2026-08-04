@@ -19,6 +19,34 @@ function sql() {
   return neon(process.env.DATABASE_URL);
 }
 
+// Auto-provision the auth schema so a fresh Neon/Postgres DB works without
+// running manual SQL. Idempotent — runs once per process, then no-ops.
+let authTablesReady = false;
+async function ensureAuthTables() {
+  if (!USE_DB || authTablesReady) return;
+  const db = sql();
+  await db`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      is_admin BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+  await db`
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      email TEXT,
+      is_admin BOOLEAN,
+      created_at BIGINT,
+      expires_at BIGINT NOT NULL
+    )
+  `;
+  authTablesReady = true;
+}
+
 // ── File-based helpers (local dev) ──────────────────────────────────────────
 
 const USERS_FILE = path.join(config.dataDir, 'users.json');
@@ -61,6 +89,7 @@ async function register(email, password) {
   const id = 'u_' + Date.now();
 
   if (USE_DB) {
+    await ensureAuthTables();
     const db = sql();
     const existing = await db`SELECT id FROM users WHERE email = ${lc}`;
     if (existing.length) throw new Error('Email already registered');
@@ -83,6 +112,7 @@ async function login(email, password) {
   const hash = hashPassword(password);
 
   if (USE_DB) {
+    await ensureAuthTables();
     const db = sql();
     const rows = await db`SELECT id, email, is_admin FROM users WHERE email = ${lc} AND password_hash = ${hash}`;
     if (!rows.length) throw new Error('Invalid email or password');
@@ -113,6 +143,7 @@ async function verifyToken(token) {
   if (!token) return null;
 
   if (USE_DB) {
+    await ensureAuthTables();
     const db = sql();
     const rows = await db`SELECT * FROM sessions WHERE token = ${token} AND expires_at > ${Date.now()}`;
     if (!rows.length) return null;
