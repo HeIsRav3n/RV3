@@ -184,7 +184,12 @@ function allRpcUrls(extra = [], chainSlug = 'ethereum') {
     // another chain's endpoints, which would broadcast to the wrong network.
     const pub = publicRpc(chain);
     if (pub) urls.add(pub);
-    else for (const r of config.envRpcs) urls.add(r.url);
+    else {
+      // Last resort: only borrow Ethereum endpoints (the canonical default),
+      // never another chain's — prevents e.g. an ETH mint hitting Robinhood.
+      const eth = config.envRpcs.filter(r => r.chain === 'ethereum');
+      for (const r of (eth.length ? eth : config.envRpcs)) urls.add(r.url);
+    }
   }
   for (const r of extra) {
     const url = typeof r === 'string' ? r : r?.url;

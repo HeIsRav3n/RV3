@@ -42,6 +42,12 @@ const config = {
     pickRpc('ROBINHOOD_RPC_PRIMARY', 'Primary', 'robinhood'),
     pickRpc('ROBINHOOD_RPC_BLAST_1', 'Blast', 'robinhood'),
   ].filter(Boolean),
+  // Built-in public endpoints that ship enabled by default so the chain is
+  // usable and visible out of the box. Overridden if the user sets the matching
+  // env RPC above (dedup by chain+role happens right after).
+  defaultRpcs: [
+    { id: 'default_robinhood', name: 'Robinhood Chain (public)', role: 'Primary', url: 'https://rpc.mainnet.chain.robinhood.com', chain: 'robinhood', ms: null, active: true, fromEnv: false, isDefault: true },
+  ],
   builderRpcs: [
     pickBuilder('ETH_BUILDER_TITAN'),
     pickBuilder('ETH_BUILDER_BEAVER'),
@@ -51,6 +57,12 @@ const config = {
   workerTickMs: parseInt(process.env.WORKER_TICK_MS || '200', 10),
   copymintScanMs: parseInt(process.env.COPYMINT_SCAN_MS || '4000', 10),
 };
+
+// Merge default public RPCs, but only for chains the user hasn't already
+// configured via env (env always wins over the shared public endpoint).
+for (const d of config.defaultRpcs) {
+  if (!config.envRpcs.some(r => r.chain === d.chain)) config.envRpcs.push(d);
+}
 
 config.hasWalletEncryption = config.walletEncryptionKey.length === 64 && /^[0-9a-fA-F]+$/.test(config.walletEncryptionKey);
 

@@ -150,6 +150,8 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 .ct-eth{background:rgba(74,124,252,.12);color:var(--accent3)}
 .ct-base{background:rgba(79,168,232,.12);color:var(--blue)}
 .ct-blast{background:rgba(245,160,32,.12);color:var(--amber)}
+.ct-poly{background:rgba(130,71,229,.14);color:#a78bfa}
+.ct-rh{background:rgba(15,207,133,.12);color:var(--green)}
 
 /* DROPS TABLE */
 .dt{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:14px}
@@ -867,6 +869,14 @@ function fmtRoute(r) {
   const k = String(r || '').toLowerCase().replace(/[\s-]+/g, '_');
   return ROUTE_LABELS[k] || ROUTE_LABELS[k.replace(/^fb_/, 'fb_')] || String(r || '').replace(/_/g, ' ');
 }
+function chainBadgeClass(chain) {
+  const c = String(chain || '').toLowerCase();
+  if (c === 'base') return 'ct-base';
+  if (c === 'blast') return 'ct-blast';
+  if (c === 'polygon' || c === 'matic') return 'ct-poly';
+  if (c === 'robinhood') return 'ct-rh';
+  return 'ct-eth';
+}
 
 // PERSISTENCE: session-scoped, clears on close
 function saveState() {
@@ -914,7 +924,7 @@ function loadState() {
     if(Array.isArray(d.wallets)) S.wallets = d.wallets.slice(0, 200).filter(w => w && typeof w.id === 'string').map(w => ({
       id: clip(w.id, 64), name: clip(w.name, 80), addr: sanitizeAddr(w.addr) || clip(w.addr, 50),
       eth: sanitizeNum(w.eth, 0, 1e6), nonce: sanitizeInt(w.nonce, 0, 999999),
-      chain: ['ETH','Ethereum','Base','Blast'].includes(w.chain) ? w.chain : 'ETH', low: !!w.low
+      chain: ['ETH','Ethereum','Base','Blast','Polygon','Robinhood'].includes(w.chain) ? w.chain : 'ETH', low: !!w.low
     }));
     if(Array.isArray(d.drops)) S.drops = d.drops.slice(0, 100).filter(x => x && typeof x.id === 'string').map(x => ({
       id: clip(x.id, 64), name: clip(x.name, 120), addr: clip(x.addr, 66),
@@ -1130,6 +1140,7 @@ function detAnalyze(val) {
   else if(v.includes('manifold')) { std='Manifold'; stdClass='mf'; chain='Ethereum'; }
   else if(v.includes('thirdweb')) { std='Thirdweb'; stdClass='tw'; }
   else if(v.includes('base')) { chain='Base'; }
+  else if(v.includes('robinhood')) { chain='Robinhood'; }
   else if(v.includes('blast')) { chain='Blast'; }
   const isUrl = v.includes('http') || v.includes('.io') || v.includes('.xyz') || v.includes('.com');
   return {
@@ -1223,7 +1234,7 @@ function renderDropsTableHTML() {
   ${S.drops.map(d => {
     const best = d.phases?.find(p=>p.status==='live') || d.phases?.find(p=>p.status==='scheduled') || d.phases?.[0];
     return `<div class="dt-row">
-      <div class="dtd"><div class="dn">${esc(d.name)}</div><div class="da-addr">${esc(d.addr)}</div><span class="ct ${d.chain==='Base'?'ct-base':d.chain==='Blast'?'ct-blast':'ct-eth'}" style="margin-top:3px;display:inline-flex">◆ ${esc(d.chain||'ETH')}</span></div>
+      <div class="dtd"><div class="dn">${esc(d.name)}</div><div class="da-addr">${esc(d.addr)}</div><span class="ct ${chainBadgeClass(d.chain)}" style="margin-top:3px;display:inline-flex">◆ ${esc(d.chain||'ETH')}</span></div>
       <div class="dtd"><span class="tb tb-${allowStdClass(d.stdClass)}">${esc(d.std||'ERC-721A')}</span></div>
       <div class="dtd" style="font-size:12px">${best?esc(best.label):'—'}</div>
       <div class="dtd">${(d.phases||[]).map(p=>`<span class="st st-${p.status==='live'?'live':p.status==='scheduled'?'pend':'end'}" style="margin:1px 2px 1px 0;font-size:9.5px">${esc(p.status)}</span>`).join('')||'—'}</div>
@@ -1316,7 +1327,7 @@ function walletCardHTML(w, lowBal) {
     <div class="wc-bal">${(w.eth||0).toFixed(4)} ETH</div>
     <div class="wc-sub">${w.address ? w.address.slice(0,10)+'…'+w.address.slice(-8) : ''}</div>
     <div class="wc-actions">
-      <span class="ct ${w.chain==='Base'?'ct-base':w.chain==='Blast'?'ct-blast':'ct-eth'}">◆ ${esc(w.chain||'ETH')}</span>
+      <span class="ct ${chainBadgeClass(w.chain)}">◆ ${esc(w.chain||'ETH')}</span>
       <div style="display:flex;gap:2px">
         <span class="wc-act" onclick="copyAddr('${esc(w.address||w.addr)}')" title="Copy address">⧉</span>
         <span class="wc-act del" onclick="walletDelete('${esc(w.id)}')" title="Remove">✕</span>
@@ -1504,7 +1515,7 @@ function renderDrops() {
   ${S.drops.map(d => {
     const best = d.phases?.find(p=>p.status==='live') || d.phases?.find(p=>p.status==='scheduled') || d.phases?.[0];
     return `<div class="dt-row">
-      <div class="dtd"><div class="dn">${esc(d.name)}</div><div class="da-addr">${esc(d.addr)}</div><span class="ct ${d.chain==='Base'?'ct-base':d.chain==='Blast'?'ct-blast':'ct-eth'}" style="margin-top:3px;display:inline-flex">◆ ${esc(d.chain||'ETH')}</span></div>
+      <div class="dtd"><div class="dn">${esc(d.name)}</div><div class="da-addr">${esc(d.addr)}</div><span class="ct ${chainBadgeClass(d.chain)}" style="margin-top:3px;display:inline-flex">◆ ${esc(d.chain||'ETH')}</span></div>
       <div class="dtd"><span class="tb tb-${allowStdClass(d.stdClass)}">${esc(d.std||'ERC-721A')}</span></div>
       <div class="dtd" style="font-size:12px">${best?esc(best.label):'—'}</div>
       <div class="dtd">${(d.phases||[]).map(p=>`<span class="st st-${p.status==='live'?'live':p.status==='scheduled'?'pend':'end'}" style="margin:1px 2px 1px 0;font-size:9.5px">${esc(p.status)}</span>`).join('')||'—'}</div>
@@ -1517,7 +1528,7 @@ function renderDrops() {
 
   c.innerHTML = `
 <div class="card">
-  <div class="card-hd"><span style="font-size:15px">◎</span><h2>Detect contract</h2><span style="font-size:10.5px;color:var(--text3)">ETH · Base · Blast</span></div>
+  <div class="card-hd"><span style="font-size:15px">◎</span><h2>Detect contract</h2><span style="font-size:10.5px;color:var(--text3)">ETH · Base · Blast · Robinhood</span></div>
   <div class="card-body">
     <div style="display:flex;gap:8px">
       <input class="fi" id="det-in" placeholder="0x...  or  opensea.io/collection/...  or  magiceden.io/collections/..."
