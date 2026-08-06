@@ -2167,7 +2167,7 @@ ${RV3_Auth.isAdmin() ? `
     <div><strong style="color:var(--text)">Public</strong> — standard mempool. No MEV protection.</div>
     <div><strong style="color:var(--text)">Direct RPC</strong> — signs once, blasts to all your endpoints in parallel. No Flashbots.</div>
     <div><strong style="color:var(--text)">Flashbots Protect</strong> — private relay via <code>ETH_RPC_PRIVATE</code>. Sandwich-resistant.</div>
-    <div><strong style="color:var(--text)">Flashbots bundle</strong> — private bundle; requires <code>FLASHBOTS_AUTH_PRIVATE_KEY</code>.</div>
+    <div><strong style="color:var(--text)">Flashbots bundle</strong> — with 2+ wallets, all mint txs are packed into ONE atomic bundle that lands together in a single block (or not at all — zero gas wasted). Targets the next 4 blocks automatically. Requires <code>FLASHBOTS_AUTH_PRIVATE_KEY</code>.</div>
     <div><strong style="color:var(--text)">Delegation batch</strong> — one TX mints for all wallets via executor contract.</div>
   </div>
 </div>
@@ -3231,7 +3231,15 @@ function sweepExecute() {
 const NOTIFS = [];
 const CHANGELOG = [
   {
-    ver:'v2.2.0', date:'Aug 4 2026', isNew:true,
+    ver:'v2.3.0', date:'Aug 6 2026', isNew:true,
+    items:[
+      {tag:'new', text:'Atomic multi-wallet bundles (Falcon-style) — with the Flashbots bundle route and 2+ wallets, every mint tx is packed into ONE bundle that lands together in a single block or not at all: no partial fills, zero gas wasted on misses'},
+      {tag:'new', text:'Bundles auto-target the next 4 blocks in parallel — a busy block no longer kills the attempt'},
+      {tag:'fix', text:'Broadcast hot path no longer waits for slow RPC pings — fastest endpoint is picked instantly from cached rankings (was blocking up to 3s at fire time)'},
+    ]
+  },
+  {
+    ver:'v2.2.0', date:'Aug 4 2026', isNew:false,
     items:[
       {tag:'new', text:'Wallets page chain selector — view live balances on Robinhood, Base, Blast, or Polygon without touching stored ETH balances'},
       {tag:'new', text:'NFT Sweep on Robinhood — NFTs discovered via the Blockscout explorer and transferred on-chain (ERC-721 + ERC-1155)'},
@@ -3482,7 +3490,7 @@ function renderGuide() {
   <li><strong>Direct RPC</strong> — Blast to all endpoints. Fastest for most mints.</li>
   <li><strong>Public mempool</strong> — Standard broadcast. No privacy.</li>
   <li><strong>Flashbots Protect</strong> — Private relay via <code>ETH_RPC_PRIVATE</code>. Sandwich-resistant.</li>
-  <li><strong>Flashbots bundle</strong> — Targets a specific block. Requires <code>FLASHBOTS_AUTH_PRIVATE_KEY</code>.</li>
+  <li><strong>Flashbots bundle</strong> — With 2+ wallets: atomic multi-wallet bundle — every wallet mints in the same block or nothing lands (no partial fills, no wasted gas). Auto-targets the next 4 blocks. Requires <code>FLASHBOTS_AUTH_PRIVATE_KEY</code>.</li>
   <li><strong>Delegation batch</strong> — One transaction mints for all wallets via your executor contract.</li>
 </ul>
 <h4>Mint speed</h4>

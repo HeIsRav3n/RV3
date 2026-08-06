@@ -35,12 +35,27 @@ async function getFastestUrl(urls) {
   if (!list.length) throw new Error('No RPC URLs');
   if (list.length === 1) return list[0];
 
-  const ranked = await Promise.allSettled(list.map(async url => ({ url, ms: await ping(url, 3000) })));
-  const ok = ranked
-    .filter(r => r.status === 'fulfilled')
-    .map(r => r.value)
-    .sort((a, b) => a.ms - b.ms);
-  return ok[0]?.url || list[0];
+  // Hot path (0ms): any fresh ping data → return best cached URL immediately
+  // and refresh missing endpoints in the background. Never block a broadcast
+  // on a slow/dead endpoint's ping timeout.
+  const now = Date.now();
+  const cached = list
+    .map(url => ({ url, entry: pingCache.get(url) }))
+    .filter(({ entry }) => entry && now - entry.at < PING_CACHE_MS);
+  if (cached.length) {
+    const stale = list.filter(u => !cached.some(c => c.url === u));
+    if (stale.length) Promise.allSettled(stale.map(u => ping(u, 3000)));
+    cached.sort((a, b) => a.entry.ms - b.entry.ms);
+    return cached[0].url;
+  }
+
+  // Cold path: race — first endpoint to answer is (by definition) the fastest
+  // right now. Remaining pings keep running to fill the cache for next time.
+  try {
+    return await Promise.any(list.map(async url => { await ping(url, 3000); return url; }));
+  } catch {
+    return list[0];
+  }
 }
 
 async function getBlockNumber(url) {
