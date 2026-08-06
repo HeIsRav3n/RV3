@@ -21,6 +21,7 @@ const mint = require('../services/mint');
 const receipt = require('../services/receipt');
 const gql = require('../services/gql');
 const copymint = require('../services/copymint');
+const delegation = require('../services/delegation');
 
 const router = express.Router();
 
@@ -665,6 +666,142 @@ router.delete('/copymint/:id', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── Delegation batch (on-chain RV3BatchMinter) ───────────────────────────────
+
+function findWallet(id) {
+  return state().wallets.find(w => w.id === id || w.address === id);
+}
+
+router.get('/delegation', async (req, res) => {
+  const deps = state().deployments || [];
+  // Best-effort live balances; never let one dead RPC fail the whole list.
+  const withBal = await Promise.all(deps.map(async d => {
+    let balance = null;
+    try { balance = await delegation.contractBalance(d, req.query.rpcUrls || []); } catch { /* */ }
+    return { ...d, balance };
+  }));
+  res.json({ deployments: withBal });
+});
+
+router.post('/delegation/deploy', taskLimiter, async (req, res) => {
+  const s = state();
+  const body = req.body || {};
+  const owner = findWallet(String(body.ownerWalletId || ''));
+  if (!owner) return res.status(400).json({ error: 'ownerWalletId not found' });
+  if (!config.enableLiveMint) return res.status(400).json({ error: 'Set ENABLE_LIVE_MINT=true to deploy contracts' });
+  const log = (level, msg) => store.appendLog(s, level, `[deleg] ${msg}`);
+  try {
+    const dep = await delegation.deploy({
+      ownerWallet: owner,
+      chain: body.chain || 'ethereum',
+      rpcUrls: (body.rpcUrls || []).filter(u => typeof u === 'string' && u.startsWith('https://')),
+      gasGwei: tx.GAS_PRESETS[body.gasPreset] || tx.GAS_PRESETS.normal,
+      log,
+    });
+    dep.label = String(body.label || 'Batch executor').slice(0, 40);
+    s.deployments = [dep, ...(s.deployments || [])];
+    worker.save();
+    res.json({ deployment: dep });
+  } catch (e) {
+    log('err', `deploy failed: ${e.message}`);
+    res.status(502).json({ error: e.message });
+  }
+});
+
+router.post('/delegation/:id/mint', taskLimiter, async (req, res) => {
+  const s = state();
+  const body = req.body || {};
+  const dep = (s.deployments || []).find(d => d.id === req.params.id || d.address === req.params.id);
+  if (!dep) return res.status(404).json({ error: 'Deployment not found' });
+  const owner = findWallet(body.ownerWalletId) || findWallet(dep.ownerId);
+  if (!owner) return res.status(400).json({ error: 'Operator wallet not found' });
+  if (!config.enableLiveMint) return res.status(400).json({ error: 'Set ENABLE_LIVE_MINT=true to batch mint' });
+  const log = (level, msg) => store.appendLog(s, level, `[deleg:${dep.address.slice(0, 8)}] ${msg}`);
+  try {
+    const result = await delegation.batchMint({
+      deployment: dep,
+      ownerWallet: owner,
+      openseaSlug: String(body.openseaSlug || body.slug || ''),
+      qty: Math.max(1, parseInt(body.qty, 10) || 1),
+      count: Math.max(1, parseInt(body.count, 10) || 1),
+      gasGwei: tx.GAS_PRESETS[body.gasPreset] || tx.GAS_PRESETS.normal,
+      rpcUrls: (body.rpcUrls || []).filter(u => typeof u === 'string' && u.startsWith('https://')),
+      log,
+    });
+    s.history = [{
+      id: `run_${Date.now()}`, type: 'delegation', drop: body.openseaSlug || 'batch mint',
+      route: 'DELEGATION', wallets: result.requested, time: new Date().toLocaleString(),
+      status: 'completed', minted: result.tokensMinted, txHash: result.txHash,
+      note: `${result.succeeded}/${result.requested} mints · block ${result.block}`,
+    }, ...(s.history || [])].slice(0, 500);
+    worker.save();
+    res.json({ result });
+  } catch (e) {
+    log('err', `batchMint failed: ${e.message}`);
+    s.history = [{
+      id: `run_${Date.now()}`, type: 'delegation', drop: body.openseaSlug || 'batch mint',
+      route: 'DELEGATION', wallets: parseInt(body.count, 10) || 0, time: new Date().toLocaleString(),
+      status: 'failed', minted: 0, txHash: null, note: e.message.slice(0, 140),
+    }, ...(s.history || [])].slice(0, 500);
+    worker.save();
+    res.status(502).json({ error: e.message });
+  }
+});
+
+router.post('/delegation/:id/sweep', taskLimiter, async (req, res) => {
+  const s = state();
+  const body = req.body || {};
+  const dep = (s.deployments || []).find(d => d.id === req.params.id || d.address === req.params.id);
+  if (!dep) return res.status(404).json({ error: 'Deployment not found' });
+  const owner = findWallet(body.ownerWalletId) || findWallet(dep.ownerId);
+  if (!owner) return res.status(400).json({ error: 'Operator wallet not found' });
+  const log = (level, msg) => store.appendLog(s, level, `[deleg:${dep.address.slice(0, 8)}] ${msg}`);
+  try {
+    const result = await delegation.sweep({
+      deployment: dep, ownerWallet: owner, to: body.to || null,
+      gasGwei: tx.GAS_PRESETS[body.gasPreset] || tx.GAS_PRESETS.normal,
+      rpcUrls: (body.rpcUrls || []).filter(u => typeof u === 'string' && u.startsWith('https://')),
+      log,
+    });
+    worker.save();
+    res.json({ result });
+  } catch (e) {
+    log('err', `sweep failed: ${e.message}`);
+    res.status(502).json({ error: e.message });
+  }
+});
+
+router.post('/delegation/:id/withdraw', taskLimiter, async (req, res) => {
+  const s = state();
+  const body = req.body || {};
+  const dep = (s.deployments || []).find(d => d.id === req.params.id || d.address === req.params.id);
+  if (!dep) return res.status(404).json({ error: 'Deployment not found' });
+  const owner = findWallet(body.ownerWalletId) || findWallet(dep.ownerId);
+  if (!owner) return res.status(400).json({ error: 'Operator wallet not found' });
+  const log = (level, msg) => store.appendLog(s, level, `[deleg:${dep.address.slice(0, 8)}] ${msg}`);
+  try {
+    const result = await delegation.withdraw({
+      deployment: dep, ownerWallet: owner, to: body.to || null,
+      gasGwei: tx.GAS_PRESETS[body.gasPreset] || tx.GAS_PRESETS.normal,
+      rpcUrls: (body.rpcUrls || []).filter(u => typeof u === 'string' && u.startsWith('https://')),
+      log,
+    });
+    worker.save();
+    res.json({ result });
+  } catch (e) {
+    log('err', `withdraw failed: ${e.message}`);
+    res.status(502).json({ error: e.message });
+  }
+});
+
+router.delete('/delegation/:id', (req, res) => {
+  const s = state();
+  const before = (s.deployments || []).length;
+  s.deployments = (s.deployments || []).filter(d => d.id !== req.params.id && d.address !== req.params.id);
+  worker.save();
+  res.json({ ok: true, removed: before - s.deployments.length });
 });
 
 router.post('/notify/test', async (req, res) => {

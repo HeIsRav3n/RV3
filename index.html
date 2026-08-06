@@ -1943,34 +1943,194 @@ async function cmScan() {
   } catch (e) { toast(e.message, '⚠'); }
 }
 
+const DELEG = { deployments: [], expanded: null, busy: false };
+const DELEG_CHAINS = [['ethereum','Ethereum'],['robinhood','Robinhood'],['base','Base'],['blast','Blast'],['polygon','Polygon']];
+
+function delegSlugFrom(input) {
+  const s = String(input || '').trim();
+  const m = s.match(/opensea\.io\/(?:collection|assets\/[a-z]+)\/([^/?#]+)/i);
+  return m ? m[1] : s;
+}
+function delegExplorerAddr(chain, address) {
+  const base = (chainExplorer[chain] || chainExplorer.ethereum).replace('/tx/', '/address/');
+  return base + address;
+}
+
 function renderDeleg() {
   const c = document.getElementById('content');
+  document.getElementById('tba').innerHTML = `<button class="btn btn-sm" onclick="delegRefresh()">⟳ Refresh</button>`;
   c.innerHTML = `
 <div class="card"><div class="card-hd"><h2>How batch mint works</h2></div>
 <div class="card-body" style="font-size:12.5px;line-height:1.85;color:var(--text2)">
-  Your executor contract runs multiple mint calls in one transaction for <code>mintSigned</code> OpenSea drops — operator wallet pays all costs; NFTs land on each task wallet.<br><br>
-  For <code>mintPublic</code> drops where your executor is not on the SeaDrop payer allowlist, RV3 orchestrates separate wallet-signed mints. Use Private RPC for fastest FCFS.
+  Deploy your own <code>RV3BatchMinter</code> contract (owner-gated, minimal, auditable — source in <code>/contracts</code>). One <strong>batchMint</strong> transaction fires a drop's mint calldata <em>N</em> times, so a whole batch mints under a single nonce and confirmation instead of N separate wallet transactions. NFTs land in the contract; <strong>Sweep</strong> auto-discovers and transfers them to any wallet, and <strong>Withdraw</strong> returns leftover ETH.<br><br>
+  The operator wallet funds the batch via the transaction value (mint&nbsp;cost&nbsp;×&nbsp;count) and pays gas. Only the operator can mint, sweep, or withdraw.
 </div></div>
 <div class="card">
-  <div class="card-hd"><h2>Setup wizard</h2></div>
+  <div class="card-hd"><h2>Deploy batch executor</h2></div>
   <div class="card-body">
-    <div class="dsteps"><div class="ds act">1. Choose operator</div><div class="ds">2. Fund operator</div><div class="ds">3. Deploy &amp; mint</div></div>
-    <div style="font-size:12px;color:var(--text2);margin-bottom:14px">Pick the operator wallet that will pay gas and mint cost for the batch.</div>
     <div class="frow">
       <div class="fg"><label class="fl">Operator wallet</label>
-        <select class="fs">${S.wallets.length ? S.wallets.map(w=>`<option>${esc(w.name)} — ${esc(w.addr)} (${w.eth.toFixed(4)} ETH)</option>`).join('') : '<option disabled>No wallets — add in Wallets tab</option>'}</select>
+        <select class="fs" id="deleg-owner">${S.wallets.filter(w=>w.hasKey!==false).length ? S.wallets.map(w=>`<option value="${esc(w.id)}">${esc(w.name)} — ${esc(w.addr)} (${(w.eth||0).toFixed(4)} ETH)</option>`).join('') : '<option value="" disabled>No wallets — import one with its private key first</option>'}</select>
       </div>
-      <div class="fg"><label class="fl">Executor label</label><input class="fi" value="Batch executor"></div>
+      <div class="fg"><label class="fl">Chain</label>
+        <select class="fs" id="deleg-chain">${DELEG_CHAINS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select>
+      </div>
     </div>
-    <button class="btn btn-p" onclick="toast('Deploy processed by VPS worker — ensure worker is running','ℹ')">Deploy contract</button>
+    <div class="frow">
+      <div class="fg"><label class="fl">Label</label><input class="fi" id="deleg-label" value="Batch executor" maxlength="40"></div>
+      <div class="fg"><label class="fl">Gas preset</label>
+        <select class="fs" id="deleg-gas"><option value="slow">Slow</option><option value="normal" selected>Normal</option><option value="fast">Fast</option><option value="turbo">Turbo</option></select>
+      </div>
+    </div>
+    <button class="btn btn-p" id="deleg-deploy-btn" onclick="delegDeploy()">Deploy contract</button>
+    <div style="font-size:10.5px;color:var(--text3);margin-top:6px">Deploying costs gas. Requires <code>ENABLE_LIVE_MINT=true</code> and a running worker.</div>
   </div>
 </div>
 <div class="section-lbl">Your deployments</div>
-<div class="card"><div class="es">
-  <div class="es-icon">◈</div>
-  <div class="es-title">No delegation contracts deployed</div>
-  <div class="es-sub">Use the wizard above to deploy your batch executor</div>
+<div id="deleg-list"></div>`;
+  document.getElementById('deleg-list').innerHTML = delegListHTML();
+  delegRefresh();
+}
+
+function delegListHTML() {
+  if (!DELEG.deployments.length) {
+    return `<div class="card"><div class="es">
+      <div class="es-icon">◈</div>
+      <div class="es-title">No delegation contracts deployed</div>
+      <div class="es-sub">Deploy your batch executor above to get started</div>
+    </div></div>`;
+  }
+  return DELEG.deployments.map(d => {
+    const bal = d.balance == null ? '—' : `${Number(d.balance).toFixed(4)} ETH`;
+    const open = DELEG.expanded === d.id;
+    return `<div class="card" style="margin-bottom:10px"><div class="card-body">
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span class="ct ${chainBadgeClass(d.chain)}">◆ ${esc(d.chain)}</span>
+    <strong style="font-size:13px">${esc(d.label||'Batch executor')}</strong>
+    <a href="${delegExplorerAddr(d.chain,d.address)}" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11.5px;color:var(--accent3)">${esc(d.address.slice(0,10))}…${esc(d.address.slice(-8))}</a>
+    <span style="margin-left:auto;font-size:12px;color:var(--text2)">Balance: <strong style="color:var(--text)">${bal}</strong></span>
+  </div>
+  <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+    <button class="btn btn-p btn-sm" onclick="delegToggleMint('${esc(d.id)}')">${open?'✕ Close':'⚡ Batch mint'}</button>
+    <button class="btn btn-sm" onclick="delegSweep('${esc(d.id)}')">Sweep NFTs</button>
+    <button class="btn btn-sm" onclick="delegWithdraw('${esc(d.id)}')">Withdraw ETH</button>
+    <button class="btn btn-sm btn-r" style="margin-left:auto" onclick="delegRemove('${esc(d.id)}')">Remove</button>
+  </div>
+  ${open ? `
+  <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">
+    <div class="fg"><label class="fl">Drop (OpenSea URL or slug)</label>
+      <input class="fi" id="dm-slug-${esc(d.id)}" placeholder="opensea.io/collection/... or slug" style="font-family:var(--mono)"></div>
+    <div class="frow">
+      <div class="fg"><label class="fl">Qty per mint</label><input class="fi" id="dm-qty-${esc(d.id)}" type="number" min="1" value="1"></div>
+      <div class="fg"><label class="fl">Count (mints in the tx)</label><input class="fi" id="dm-count-${esc(d.id)}" type="number" min="1" value="5"></div>
+      <div class="fg"><label class="fl">Gas</label>
+        <select class="fs" id="dm-gas-${esc(d.id)}"><option value="slow">Slow</option><option value="normal" selected>Normal</option><option value="fast">Fast</option><option value="turbo">Turbo</option></select>
+      </div>
+    </div>
+    <button class="btn btn-p" onclick="delegMint('${esc(d.id)}')">⚡ Execute batch mint</button>
+    <div style="font-size:10.5px;color:var(--text3);margin-top:6px">Operator pays mint cost × count + gas in one transaction. Preflight-simulated before sending.</div>
+  </div>` : ''}
 </div></div>`;
+  }).join('');
+}
+
+async function delegRefresh() {
+  if (!API_ONLINE) return;
+  try {
+    const { deployments } = await RV3_API.delegationList();
+    DELEG.deployments = deployments || [];
+    const el = document.getElementById('deleg-list');
+    if (el) el.innerHTML = delegListHTML();
+  } catch { /* offline */ }
+}
+
+async function delegDeploy() {
+  if (!API_ONLINE) return toast('Start the backend (npm start) to deploy','ℹ');
+  const ownerWalletId = document.getElementById('deleg-owner')?.value;
+  if (!ownerWalletId) return toast('Add a wallet with its private key first','⚠');
+  const body = {
+    ownerWalletId,
+    chain: document.getElementById('deleg-chain')?.value || 'ethereum',
+    label: document.getElementById('deleg-label')?.value || 'Batch executor',
+    gasPreset: document.getElementById('deleg-gas')?.value || 'normal',
+    rpcUrls: S.rpcs.map(r => r.urlFull || r.url).filter(u => u.startsWith('https://')),
+  };
+  const btn = document.getElementById('deleg-deploy-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Deploying… (~1 block)'; }
+  try {
+    const { deployment } = await RV3_API.delegationDeploy(body);
+    addNotif('Contract deployed', `${deployment.label} · ${deployment.address.slice(0,10)}…`, 'info');
+    toast('Batch executor deployed','✓');
+    await delegRefresh();
+  } catch (e) {
+    toast(e.message || 'Deploy failed','⚠');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Deploy contract'; }
+  }
+}
+
+function delegToggleMint(id) {
+  DELEG.expanded = DELEG.expanded === id ? null : id;
+  const el = document.getElementById('deleg-list');
+  if (el) el.innerHTML = delegListHTML();
+}
+
+async function delegMint(id) {
+  const slug = delegSlugFrom(document.getElementById(`dm-slug-${id}`)?.value);
+  if (!slug) return toast('Enter a drop URL or slug','⚠');
+  const body = {
+    openseaSlug: slug,
+    qty: parseInt(document.getElementById(`dm-qty-${id}`)?.value, 10) || 1,
+    count: parseInt(document.getElementById(`dm-count-${id}`)?.value, 10) || 1,
+    gasPreset: document.getElementById(`dm-gas-${id}`)?.value || 'normal',
+    rpcUrls: S.rpcs.map(r => r.urlFull || r.url).filter(u => u.startsWith('https://')),
+  };
+  toast('Submitting batch mint…','⚡');
+  try {
+    const { result } = await RV3_API.delegationMint(id, body);
+    addNotif('Batch mint complete', `${result.succeeded}/${result.requested} mints · ${result.tokensMinted} NFT(s)`, 'ok');
+    toast(`Minted ${result.tokensMinted} NFT(s) in block ${result.block}`,'✓');
+    await delegRefresh();
+  } catch (e) {
+    toast(e.message || 'Batch mint failed','⚠');
+  }
+}
+
+async function delegSweep(id) {
+  const to = prompt('Sweep all NFTs from the contract to which address?\n(Leave blank to send to the operator wallet)');
+  if (to === null) return;
+  toast('Sweeping NFTs…','⚡');
+  try {
+    const { result } = await RV3_API.delegationSweep(id, {
+      to: to.trim() || null,
+      rpcUrls: S.rpcs.map(r => r.urlFull || r.url).filter(u => u.startsWith('https://')),
+    });
+    toast(result.swept ? `Swept ${result.swept} NFT(s)` : 'No NFTs to sweep','✓');
+    await delegRefresh();
+  } catch (e) { toast(e.message || 'Sweep failed','⚠'); }
+}
+
+async function delegWithdraw(id) {
+  const to = prompt('Withdraw contract ETH to which address?\n(Leave blank to send to the operator wallet)');
+  if (to === null) return;
+  toast('Withdrawing…','⚡');
+  try {
+    const { result } = await RV3_API.delegationWithdraw(id, {
+      to: to.trim() || null,
+      rpcUrls: S.rpcs.map(r => r.urlFull || r.url).filter(u => u.startsWith('https://')),
+    });
+    toast(result.txHash ? `Withdrew ${result.withdrawn} ETH` : 'Nothing to withdraw','✓');
+    await delegRefresh();
+  } catch (e) { toast(e.message || 'Withdraw failed','⚠'); }
+}
+
+async function delegRemove(id) {
+  if (!confirm('Remove this deployment from the list? (The contract stays on-chain — sweep and withdraw first if it still holds assets.)')) return;
+  try {
+    await RV3_API.delegationRemove(id);
+    if (DELEG.expanded === id) DELEG.expanded = null;
+    await delegRefresh();
+  } catch (e) { toast(e.message || 'Remove failed','⚠'); }
 }
 
 // ── HISTORY ──
@@ -2168,7 +2328,7 @@ ${RV3_Auth.isAdmin() ? `
     <div><strong style="color:var(--text)">Direct RPC</strong> — signs once, blasts to all your endpoints in parallel. No Flashbots.</div>
     <div><strong style="color:var(--text)">Flashbots Protect</strong> — private relay via <code>ETH_RPC_PRIVATE</code>. Sandwich-resistant.</div>
     <div><strong style="color:var(--text)">Flashbots bundle</strong> — with 2+ wallets, all mint txs are packed into ONE atomic bundle that lands together in a single block (or not at all — zero gas wasted). Targets the next 4 blocks automatically. Requires <code>FLASHBOTS_AUTH_PRIVATE_KEY</code>.</div>
-    <div><strong style="color:var(--text)">Delegation batch</strong> — one TX mints for all wallets via executor contract.</div>
+    <div><strong style="color:var(--text)">Delegation batch</strong> — deploy your own RV3BatchMinter and mint a drop N times in one TX; sweep and withdraw when done.</div>
   </div>
 </div>
 
@@ -3231,7 +3391,16 @@ function sweepExecute() {
 const NOTIFS = [];
 const CHANGELOG = [
   {
-    ver:'v2.3.0', date:'Aug 6 2026', isNew:true,
+    ver:'v2.4.0', date:'Aug 6 2026', isNew:true,
+    items:[
+      {tag:'new', text:'Delegation batch is now real: deploy your own owner-gated RV3BatchMinter contract (source in /contracts) straight from the Delegation page'},
+      {tag:'new', text:'One batchMint transaction fires a drop\'s mint calldata N times — a whole batch under one nonce and confirmation instead of N wallet txs'},
+      {tag:'new', text:'Auto-sweep: discovers NFTs the contract holds (OpenSea or Robinhood Blockscout) and transfers them out; one-click ETH withdraw'},
+      {tag:'new', text:'Preflight gas simulation on every batch mint so a bad drop reverts before you spend gas'},
+    ]
+  },
+  {
+    ver:'v2.3.0', date:'Aug 6 2026', isNew:false,
     items:[
       {tag:'new', text:'Atomic multi-wallet bundles (Falcon-style) — with the Flashbots bundle route and 2+ wallets, every mint tx is packed into ONE bundle that lands together in a single block or not at all: no partial fills, zero gas wasted on misses'},
       {tag:'new', text:'Bundles auto-target the next 4 blocks in parallel — a busy block no longer kills the attempt'},
@@ -3491,7 +3660,7 @@ function renderGuide() {
   <li><strong>Public mempool</strong> — Standard broadcast. No privacy.</li>
   <li><strong>Flashbots Protect</strong> — Private relay via <code>ETH_RPC_PRIVATE</code>. Sandwich-resistant.</li>
   <li><strong>Flashbots bundle</strong> — With 2+ wallets: atomic multi-wallet bundle — every wallet mints in the same block or nothing lands (no partial fills, no wasted gas). Auto-targets the next 4 blocks. Requires <code>FLASHBOTS_AUTH_PRIVATE_KEY</code>.</li>
-  <li><strong>Delegation batch</strong> — One transaction mints for all wallets via your executor contract.</li>
+  <li><strong>Delegation batch</strong> — Deploy your own RV3BatchMinter contract, then one transaction mints the drop N times (batchMint), NFTs land in the contract, and one-click Sweep/Withdraw pull them out. Open the Delegation page.</li>
 </ul>
 <h4>Mint speed</h4>
 <p>Confirmation time in milliseconds is tracked per transaction and averaged across wallets in each run. Visible on the Tasks page, History, and the Overview stats card.</p>`

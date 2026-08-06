@@ -194,4 +194,35 @@ const RV3_API = {
   async copymintRemove(id) {
     return this.request(`/copymint/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
+
+  // ── Delegation batch ──
+  async delegationList() {
+    return this.request('/delegation');
+  },
+
+  async delegationDeploy(body) {
+    return this.request('/delegation/deploy', { method: 'POST', body: JSON.stringify(body) });
+  },
+
+  async delegationMint(id, body) {
+    return this.request(`/delegation/${encodeURIComponent(id)}/mint`, {
+      method: 'POST', body: JSON.stringify(body),
+    });
+  },
+
+  async delegationSweep(id, body) {
+    return this.request(`/delegation/${encodeURIComponent(id)}/sweep`, {
+      method: 'POST', body: JSON.stringify(body),
+    });
+  },
+
+  async delegationWithdraw(id, body) {
+    return this.request(`/delegation/${encodeURIComponent(id)}/withdraw`, {
+      method: 'POST', body: JSON.stringify(body),
+    });
+  },
+
+  async delegationRemove(id) {
+    return this.request(`/delegation/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
 };

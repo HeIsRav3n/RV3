@@ -20,7 +20,7 @@ async function executeMintForWallet(walletEntry, task, log) {
 
   const normalizedRoute = routes.normalizeRoute(task.route);
   if (normalizedRoute === routes.ROUTES.DELEGATION) {
-    throw new Error('Delegation batch route not deployed — use Direct RPC or Flashbots Protect');
+    throw new Error('Delegation batch runs from the Delegation page (deploy a contract there, then Batch mint) — for task-queue mints use Direct RPC, Flashbots Protect, or Flashbots bundle');
   }
 
   const chainSlug = task.chainSlug || 'ethereum';
