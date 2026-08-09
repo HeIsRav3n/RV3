@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "compile:contracts": "node scripts/compile-contracts.js"
+    "compile:contracts": "node scripts/compile-contracts.js",
+    "test": "node scripts/test-auth.js && node scripts/test-bundle.js && node scripts/test-delegation.js",
+    "check": "npm audit --omit=dev && npm test && npm run compile:contracts"
   },
   "engines": {
     "node": ">=18"
@@ -16,9 +18,9 @@
     "@neondatabase/serverless": "^1.1.0",
     "cors": "^2.8.5",
     "dotenv": "^17.0.0",
-    "ethers": "^6.13.5",
+    "ethers": "^6.17.0",
     "express": "^5.0.0",
-    "express-rate-limit": "^8.0.0"
+    "express-rate-limit": "^8.6.2"
   },
   "devDependencies": {
     "solc": "^0.8.36"

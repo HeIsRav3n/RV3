@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <meta name="description" content="RV3: Personal NFT mint bot">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.coingecko.com https:;">
 <meta name="referrer" content="no-referrer">
 <link rel="icon" type="image/png" href="/assets/rv3-logo.png">
 <link rel="apple-touch-icon" href="/assets/rv3-logo.png">
@@ -423,6 +422,35 @@ code{background:var(--bg4);padding:1px 5px;border-radius:4px;font-size:11px;font
 .cl-detail-changes{font-size:12.5px;color:var(--text2);line-height:1.75}
 .cl-detail-changes li{margin-bottom:4px}
 .cl-detail-tag{display:inline-block;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;margin-right:4px;vertical-align:middle}
+
+/* RESPONSIVE PRODUCT SHELL */
+body::before{content:'';position:fixed;inset:0;pointer-events:none;background:radial-gradient(circle at 75% -10%,rgba(74,124,252,.12),transparent 35%),radial-gradient(circle at 10% 110%,rgba(15,207,133,.06),transparent 32%);z-index:-1}
+.card,.sc{box-shadow:0 10px 30px rgba(0,0,0,.12)}
+.fi:focus,.fs:focus{box-shadow:0 0 0 3px rgba(74,124,252,.12)}
+button:focus-visible,[role="button"]:focus-visible,.fi:focus-visible,.fs:focus-visible{outline:2px solid var(--accent3);outline-offset:2px}
+@media (max-width:900px){
+  #sidebar{width:54px;min-width:54px}
+  #sidebar .logo-name-wrap,#sidebar .ns,#sidebar .ni-label,#sidebar .ni-b,#sidebar .sb-status-label,#sidebar .notif-section,#sidebar .sb-logout span{display:none!important}
+  #sidebar .logo-wrap,#sidebar .ni{justify-content:center;padding-left:8px;padding-right:8px}
+  #sidebar .sb-toggle{display:none}
+  .stats-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .frow{grid-template-columns:1fr}
+}
+@media (max-width:600px){
+  html,body{min-width:320px}
+  #sidebar{width:48px;min-width:48px}
+  .content{padding:12px}
+  .topbar{padding:10px 12px;align-items:flex-start;flex-wrap:wrap}
+  .pg-title{min-width:calc(100% - 20px)}
+  .tba{width:100%;overflow-x:auto;padding-bottom:2px}
+  .stats-row{gap:8px}
+  .sc{padding:11px}.sc-val{font-size:20px}
+  .card-hd,.card-body{padding-left:12px;padding-right:12px}
+  .modal,.cl-modal{width:calc(100vw - 24px)!important;max-width:none!important;max-height:90vh}
+  table{min-width:620px}
+  .tbl-wrap{overflow-x:auto}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
 </head>
 <body>
@@ -433,8 +461,8 @@ code{background:var(--bg4);padding:1px 5px;border-radius:4px;font-size:11px;font
     <div style="text-align:center;margin-bottom:40px">
       <img src="/assets/rv3-logo.png" alt="RV3" style="width:80px;height:80px;margin-bottom:20px;border-radius:12px;box-shadow:0 8px 24px rgba(74,124,252,.2)">
       <h1 style="font-size:32px;font-weight:800;color:var(--text);margin:0 0 8px;letter-spacing:-0.5px">RV3</h1>
-      <p style="font-size:13px;color:var(--text2);margin:0">Personal NFT Mint Bot</p>
-      <p style="font-size:11px;color:var(--text3);margin:8px 0 0">Secure access required</p>
+      <p style="font-size:13px;color:var(--text2);margin:0">Private execution console</p>
+      <p style="font-size:11px;color:var(--text3);margin:8px 0 0">Administrator-controlled access</p>
     </div>
 
     <div id="loginForm" style="display:block">
@@ -446,12 +474,12 @@ code{background:var(--bg4);padding:1px 5px;border-radius:4px;font-size:11px;font
         <div class="fg" style="margin-bottom:20px">
           <label class="fl" for="login-password">Password</label>
           <input class="fi" id="login-password" type="password" placeholder="••••••••" autocomplete="current-password" style="font-size:14px;padding:11px 13px">
-          <div style="font-size:10px;color:var(--text3);margin-top:5px">Minimum 8 characters</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:5px">Protected by an encrypted, server-only session</div>
         </div>
         <button class="btn btn-p" style="width:100%;padding:12px;font-size:14px;font-weight:600" onclick="handleLogin()">Sign In</button>
-        <div style="text-align:center;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
-          <span style="font-size:12px;color:var(--text2)">New user? </span>
-          <span style="color:var(--accent3);cursor:pointer;font-weight:600;font-size:12px" onclick="showRegister()">Create account</span>
+        <div id="setupLink" style="display:none;text-align:center;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+          <span style="font-size:12px;color:var(--text2)">First deployment? </span>
+          <button class="btn btn-sm" type="button" onclick="showRegister()">Initialize administrator</button>
         </div>
       </div>
       <div id="loginError" style="display:none" class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt" id="loginErrorMsg" style="font-size:12px"></div></div>
@@ -469,13 +497,13 @@ code{background:var(--bg4);padding:1px 5px;border-radius:4px;font-size:11px;font
         <div class="fg" style="margin-bottom:14px">
           <label class="fl" for="reg-password">Password</label>
           <input class="fi" id="reg-password" type="password" placeholder="••••••••" autocomplete="new-password" style="font-size:14px;padding:11px 13px">
-          <div style="font-size:10px;color:var(--text3);margin-top:5px">Minimum 8 characters</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:5px">Use 14+ characters. Setup is permanently closed after initialization.</div>
         </div>
         <div class="fg" style="margin-bottom:20px">
           <label class="fl" for="reg-password-confirm">Confirm Password</label>
           <input class="fi" id="reg-password-confirm" type="password" placeholder="••••••••" autocomplete="new-password" style="font-size:14px;padding:11px 13px">
         </div>
-        <button class="btn btn-p" style="width:100%;padding:12px;font-size:14px;font-weight:600" onclick="handleRegister()">Create Account</button>
+        <button class="btn btn-p" style="width:100%;padding:12px;font-size:14px;font-weight:600" onclick="handleRegister()">Initialize Secure Admin</button>
       </div>
       <div id="registerError" style="display:none" class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt" id="registerErrorMsg" style="font-size:12px"></div></div>
     </div>
@@ -3842,7 +3870,7 @@ async function handleRegister() {
   const confirm = document.getElementById('reg-password-confirm')?.value;
   if (!email || !password || !confirm) { showRegisterError('All fields required'); return; }
   if (password !== confirm) { showRegisterError('Passwords do not match'); return; }
-  if (password.length < 8) { showRegisterError('Password must be at least 8 characters'); return; }
+  if (password.length < 14) { showRegisterError('Password must be at least 14 characters'); return; }
   try {
     await RV3_Auth.register(email, password);
     showApp();
@@ -3889,7 +3917,10 @@ async function checkAuth() {
       return;
     }
 
-    const verified = await RV3_Auth.verify();
+    const [verified, authStatus] = await Promise.all([
+      RV3_Auth.verify(),
+      fetch('/auth/status').then(r => r.ok ? r.json() : ({ needsBootstrap: false })),
+    ]);
     if (verified) {
       showApp();
     } else {
@@ -3897,6 +3928,8 @@ async function checkAuth() {
       document.getElementById('sidebar').style.display = 'none';
       document.getElementById('main').style.display = 'none';
       showLogin();
+      const setupLink = document.getElementById('setupLink');
+      if (setupLink) setupLink.style.display = authStatus.needsBootstrap ? 'block' : 'none';
     }
   } catch (e) {
     console.error('Auth check error:', e);

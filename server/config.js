@@ -18,6 +18,9 @@ function pickBuilder(name) {
 const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   apiSecret: (process.env.API_SECRET || '').trim(),
+  adminEmail: (process.env.ADMIN_EMAIL || '').trim().toLowerCase(),
+  isProduction: process.env.NODE_ENV === 'production',
+  sessionCookieName: 'rv3_session',
   openseaApiKey: (process.env.OPENSEA_API_KEY || '').trim(),
   etherscanApiKey: (process.env.ETHERSCAN_API_KEY || '').trim(),
   blurApiKey: (process.env.BLUR_API_KEY || '').trim(),

@@ -1,12 +1,14 @@
 'use strict';
 
 const express = require('express');
+const rateLimit = require('express-rate-limit');
+const config = require('../config');
 const authService = require('../services/auth');
 
 const router = express.Router();
 
 async function authRequired(req, res, next) {
-  const token = req.headers['x-auth-token'] || req.body?.token;
+  const token = authService.readSessionToken(req);
   const session = await authService.verifyToken(token);
   if (!session) return res.status(401).json({ error: 'Unauthorized — invalid or expired token' });
   req.session = session;
@@ -19,24 +21,48 @@ function adminRequired(req, res, next) {
   next();
 }
 
-router.post('/login', async (req, res) => {
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Too many attempts. Try again in 15 minutes.' },
+});
+
+function setSessionCookie(res, token) {
+  const secure = config.isProduction ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `${config.sessionCookieName}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=28800${secure}`);
+}
+
+function clearSessionCookie(res) {
+  const secure = config.isProduction ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `${config.sessionCookieName}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secure}`);
+}
+
+router.get('/status', async (req, res) => {
+  res.json(await authService.getAuthStatus());
+});
+
+router.post('/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
     const result = await authService.login(email, password);
-    res.json(result);
+    setSessionCookie(res, result.token);
+    res.json({ user: result.user });
   } catch (e) {
     res.status(401).json({ error: e.message });
   }
 });
 
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
     await authService.register(email, password);
     const result = await authService.login(email, password);
-    res.json(result);
+    setSessionCookie(res, result.token);
+    res.json({ user: result.user });
   } catch (e) {
     res.status(400).json({ error: e.message || 'Registration failed' });
   }
@@ -44,7 +70,7 @@ router.post('/register', async (req, res) => {
 
 router.post('/verify', async (req, res) => {
   try {
-    const token = req.headers['x-auth-token'] || req.body?.token;
+    const token = authService.readSessionToken(req);
     const session = await authService.verifyToken(token);
     if (!session) return res.status(401).json({ error: 'Invalid or expired token' });
     const user = await authService.getUser(session.userId);
@@ -57,6 +83,7 @@ router.post('/verify', async (req, res) => {
 
 router.post('/logout', authRequired, async (req, res) => {
   await authService.logout(req.token);
+  clearSessionCookie(res);
   res.json({ ok: true });
 });
 
