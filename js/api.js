@@ -15,10 +15,6 @@ const RV3_API = {
     const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
     const tok = this.token();
     if (tok) headers['X-RV3-Token'] = tok;
-    // Add auth token if available
-    if (typeof RV3_Auth !== 'undefined' && RV3_Auth.getToken()) {
-      headers['X-Auth-Token'] = RV3_Auth.getToken();
-    }
     const res = await fetch(`/api${path}`, { ...opts, headers });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || res.statusText || 'API error');

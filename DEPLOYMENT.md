@@ -49,7 +49,8 @@ nano .env  # Edit with your production values
 ```
 
 **Required secrets to update:**
-- `API_SECRET` — long random string for auth/API
+- `ADMIN_EMAIL` — the sole email allowed to initialize the first administrator
+- `DATABASE_URL` — required on serverless hosting; recommended for durable sessions
 - `WALLET_ENCRYPTION_KEY` — 64-char hex (generate: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`)
 - `OPENSEA_API_KEY` — from https://docs.opensea.io
 - `ETH_RPC_PRIMARY` — your primary Ethereum RPC
@@ -130,7 +131,7 @@ heroku login
 heroku create your-rv3-app
 
 # Set environment variables
-heroku config:set API_SECRET=your-secret
+heroku config:set ADMIN_EMAIL=you@example.com
 heroku config:set WALLET_ENCRYPTION_KEY=your-key
 heroku config:set OPENSEA_API_KEY=your-key
 heroku config:set ETH_RPC_PRIMARY=https://your-rpc
