@@ -196,7 +196,25 @@ function normalizeChain(chain) {
 // chain (best-effort; rate-limited public endpoints, fine for reads/copy-mint).
 const PUBLIC_RPC = {
   robinhood: 'https://rpc.mainnet.chain.robinhood.com',
+  base: 'https://mainnet.base.org',
+  blast: 'https://rpc.blast.io',
+  polygon: 'https://polygon-rpc.com',
 };
+
+/** Infer chain from a known env RPC URL or hostname — never guess ETH for L2 hosts. */
+function inferUrlChain(url) {
+  const known = (config.envRpcs || []).find(r => r.url === url);
+  if (known?.chain) return normalizeChain(known.chain);
+  try {
+    const h = new URL(url).hostname.toLowerCase();
+    if (h.includes('robinhood')) return 'robinhood';
+    if (h.includes('base.org') || h.includes('base-mainnet') || h.includes('basemainnet')) return 'base';
+    if (h.includes('blast.io') || h.includes('blast-mainnet') || h.includes('blastnetwork')) return 'blast';
+    if (h.includes('polygon') || h.includes('matic')) return 'polygon';
+    if (h.includes('flashbots') || h.includes('eth-mainnet') || h.includes('mainnet.infura') || h.includes('ethereum')) return 'ethereum';
+  } catch { /* */ }
+  return null;
+}
 
 function publicRpc(chainSlug) {
   return PUBLIC_RPC[normalizeChain(chainSlug)] || null;
@@ -217,20 +235,18 @@ function allRpcUrls(extra = [], chainSlug = 'ethereum') {
     if (r.chain === chain) urls.add(r.url);
   }
   if (!urls.size) {
-    // Prefer a chain-specific public fallback (e.g. Robinhood) over borrowing
-    // another chain's endpoints, which would broadcast to the wrong network.
+    // Chain-specific public fallback only. Never borrow another chain's RPC —
+    // a Base/RH mint must not hit Ethereum (or vice versa).
     const pub = publicRpc(chain);
     if (pub) urls.add(pub);
-    else {
-      // Last resort: only borrow Ethereum endpoints (the canonical default),
-      // never another chain's — prevents e.g. an ETH mint hitting Robinhood.
-      const eth = config.envRpcs.filter(r => r.chain === 'ethereum');
-      for (const r of (eth.length ? eth : config.envRpcs)) urls.add(r.url);
-    }
   }
   for (const r of extra) {
     const url = typeof r === 'string' ? r : r?.url;
-    if (url?.startsWith('https://')) urls.add(url);
+    if (!url?.startsWith('https://')) continue;
+    const extraChain = inferUrlChain(url);
+    if (extraChain && extraChain !== chain) continue;
+    if (!extraChain && chain !== 'ethereum') continue;
+    urls.add(url);
   }
   return [...urls];
 }
@@ -250,5 +266,5 @@ function maskUrl(url) {
 module.exports = {
   ping, prewarmUrls, getFastestUrl, getBlockNumber, getBalance, getGasPrice,
   simulateCall, estimateGas, batchCall, getWalletNonceAndChain, allRpcUrls, getPrivateRpc,
-  normalizeChain, maskUrl, publicRpc,
+  normalizeChain, maskUrl, publicRpc, inferUrlChain,
 };

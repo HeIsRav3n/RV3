@@ -152,6 +152,7 @@ router.get('/rpc/env', (req, res) => {
       id: r.id,
       name: r.name || r.id,
       role: r.role,
+      chain: r.chain || 'ethereum',
       url: rpc.maskUrl(r.url),
       urlFull: r.url,
       fromEnv: true,

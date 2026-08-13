@@ -125,13 +125,25 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 .wc-badge.ready{background:rgba(15,207,133,.14);color:var(--green)}
 .wc-badge.low{background:rgba(245,160,32,.14);color:var(--amber)}
 .wc-badge.unfunded{background:rgba(240,64,64,.12);color:var(--red)}
+.wc-badge.pending{background:var(--bg4);color:var(--text3)}
 .wc-badge.watch{background:var(--bg4);color:var(--text3)}
 .wr-table{width:100%;border-collapse:collapse;font-size:12px}
 .wr-table th{text-align:left;font-size:9.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;font-weight:700;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--bg3)}
 .wr-table td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
 .wr-wrow{font-size:10.5px;color:var(--text2);padding:2px 0}
+.chain-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.chain-chip{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:8px 11px;min-width:88px;cursor:pointer}
+.chain-chip:hover{border-color:var(--border3)}
+.chain-chip .cc-k{font-size:9.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--text3)}
+.chain-chip .cc-v{font-size:13px;font-weight:800;margin-top:3px}
+.chain-chip .cc-s{font-size:10px;color:var(--text2);margin-top:2px}
+.chain-chip.hot{border-color:rgba(15,207,133,.28)}
+.chain-chip.warn{border-color:rgba(245,160,32,.3)}
+.chain-chip.hot .cc-s{color:var(--green)}
+.chain-chip.warn .cc-s{color:var(--amber)}
+.cmd-chain{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--text3);margin-left:6px;vertical-align:middle}
 .cmd-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-@media(max-width:900px){.pipe{grid-template-columns:1fr 1fr}.cmd-grid{grid-template-columns:1fr}}
+@media(max-width:900px){.pipe{grid-template-columns:1fr 1fr}.cmd-grid{grid-template-columns:1fr}.chain-row{grid-template-columns:1fr 1fr}}
 
 /* FORMS */
 .frow{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -528,7 +540,7 @@ code{background:var(--bg4);padding:1px 5px;border-radius:4px;font-size:11px;font
   </div>
   <div class="nav">
     <div class="ns">Core</div>
-    <div class="ni act" id="nav-overview" onclick="go('overview')" role="button" aria-current="page" title="Overview">
+    <div class="ni act" id="nav-overview" onclick="go('overview')" role="button" aria-current="page" title="Command">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
       <span class="ni-label">Command</span>
     </div>
@@ -905,6 +917,68 @@ function fmtRoute(r) {
   const k = String(r || '').toLowerCase().replace(/[\s-]+/g, '_');
   return ROUTE_LABELS[k] || ROUTE_LABELS[k.replace(/^fb_/, 'fb_')] || String(r || '').replace(/_/g, ' ');
 }
+const CHAIN_META = {
+  ethereum: { label: 'Ethereum', short: 'ETH', tx: 'https://etherscan.io/tx/', addr: 'https://etherscan.io/address/' },
+  base: { label: 'Base', short: 'BASE', tx: 'https://basescan.org/tx/', addr: 'https://basescan.org/address/' },
+  blast: { label: 'Blast', short: 'BLAST', tx: 'https://blastscan.io/tx/', addr: 'https://blastscan.io/address/' },
+  polygon: { label: 'Polygon', short: 'POLY', tx: 'https://polygonscan.com/tx/', addr: 'https://polygonscan.com/address/' },
+  robinhood: { label: 'Robinhood', short: 'RH', tx: 'https://robinhoodchain.blockscout.com/tx/', addr: 'https://robinhoodchain.blockscout.com/address/' },
+};
+function normalizeChainSlug(chain) {
+  const c = String(chain || 'ethereum').toLowerCase();
+  if (c === 'eth' || c === 'ethereum') return 'ethereum';
+  if (c === 'base') return 'base';
+  if (c === 'blast') return 'blast';
+  if (c === 'polygon' || c === 'matic') return 'polygon';
+  if (c === 'robinhood' || c === 'rh' || c === 'robinhood-chain' || c === '4663') return 'robinhood';
+  return 'ethereum';
+}
+function chainMeta(chain) { return CHAIN_META[normalizeChainSlug(chain)] || CHAIN_META.ethereum; }
+function fmtChain(chain) { return chainMeta(chain).short; }
+function txUrl(chain, hash) {
+  if (!hash) return '';
+  return chainMeta(chain).tx + hash;
+}
+function txLinkHTML(chain, hash, label) {
+  if (!hash) return '';
+  const h = String(hash);
+  const text = label || (h.slice(0, 12) + '…');
+  return `<a href="${esc(txUrl(chain, h))}" target="_blank" rel="noopener" style="color:var(--accent3);text-decoration:none">↗ ${esc(text)}</a>`;
+}
+function chainChipHTML(chain) {
+  const m = chainMeta(chain);
+  return `<span class="ct ${chainBadgeClass(chain)}" style="display:inline-flex">◆ ${esc(m.short)}</span>`;
+}
+function inferChainFromRpcUrl(url) {
+  try {
+    const h = new URL(url).hostname.toLowerCase();
+    if (h.includes('robinhood')) return 'robinhood';
+    if (h.includes('base.org') || h.includes('base-mainnet') || h.includes('basemainnet')) return 'base';
+    if (h.includes('blast.io') || h.includes('blast-mainnet') || h.includes('blastnetwork')) return 'blast';
+    if (h.includes('polygon') || h.includes('matic')) return 'polygon';
+    if (h.includes('flashbots') || h.includes('eth-mainnet') || h.includes('mainnet.infura') || h.includes('ethereum')) return 'ethereum';
+  } catch { /* */ }
+  return null;
+}
+function rpcUrlsForChain(chain) {
+  const c = normalizeChainSlug(chain);
+  return (S.rpcs || []).filter(r => {
+    if (r.active === false) return false;
+    const url = r.urlFull || r.url;
+    if (!url || !String(url).startsWith('https://')) return false;
+    const rc = r.chain ? normalizeChainSlug(r.chain) : inferChainFromRpcUrl(url);
+    return !rc || rc === c;
+  }).map(r => r.urlFull || r.url);
+}
+function chainHasRpc(chain) {
+  const c = normalizeChainSlug(chain);
+  if (rpcUrlsForChain(c).length) return true;
+  if (c === 'ethereum') return (S.rpcs || []).length > 0;
+  return ['robinhood', 'base', 'blast', 'polygon'].includes(c);
+}
+function itemChain(item) {
+  return normalizeChainSlug(item?.chainSlug || item?.chain);
+}
 function chainBadgeClass(chain) {
   const c = String(chain || '').toLowerCase();
   if (c === 'base') return 'ct-base';
@@ -933,7 +1007,8 @@ function loadState() {
       const d = JSON.parse(raw);
       if (Array.isArray(d)) S.rpcs = d.slice(0,50).filter(r => r && typeof r.id === 'string' && isHttpsUrl(r.url)).map(r => ({
         id: clip(r.id,64), name: clip(r.name,40), role: ['Primary','Blast','Private'].includes(r.role)?r.role:'Private',
-        url: r.url, ms: r.ms==null?null:sanitizeInt(r.ms,0,60000), active: r.active!==false
+        url: r.url, ms: r.ms==null?null:sanitizeInt(r.ms,0,60000), active: r.active!==false,
+        chain: r.chain ? clip(r.chain, 20) : null, urlFull: r.urlFull && isHttpsUrl(r.urlFull) ? r.urlFull : undefined,
       }));
     }
   } catch {}
@@ -987,6 +1062,7 @@ function loadState() {
       status: ['queued','running','done','failed','cancelled','skipped','broadcast','reverted','completed','confirmed'].includes(t.status) ? t.status : 'queued',
       time: clip(t.time, 40), scheduledFor: t.scheduledFor ? clip(t.scheduledFor, 40) : null,
       wallets: sanitizeInt(t.wallets, 0, 200), rpcCount: sanitizeInt(t.rpcCount, 0, 50),
+      chainSlug: t.chainSlug ? clip(t.chainSlug, 20) : 'ethereum',
       error: t.error ? clip(t.error, 400) : null,
       txHashes: Array.isArray(t.txHashes) ? t.txHashes.filter(h => typeof h === 'string').slice(0, 50).map(h => clip(h, 66)) : [],
       avgBroadcastMs: t.avgBroadcastMs != null ? sanitizeInt(t.avgBroadcastMs, 0, 1e8) : null,
@@ -1059,23 +1135,65 @@ function updateBadges() {
 function walletHasKey(w) {
   return !!(w.serverKey || w.hasKey || w.encryptedKey);
 }
-function walletReadiness(w) {
+const FLEET_BAL = {};
+let _fleetBalAt = 0;
+let _fleetBalBusy = false;
+function walletEthOn(w, chain) {
+  const c = normalizeChainSlug(chain != null ? chain : WALLET_VIEW_CHAIN);
+  if (c === 'ethereum') return w.eth || 0;
+  if (FLEET_BAL[c] && typeof FLEET_BAL[c][w.id] === 'number') return FLEET_BAL[c][w.id];
+  if (typeof WALLET_VIEW_CHAIN !== 'undefined' && WALLET_VIEW_CHAIN === c && typeof WALLET_CHAIN_BAL[w.id] === 'number') return WALLET_CHAIN_BAL[w.id];
+  return null;
+}
+function walletReadiness(w, chain) {
   const thresh = parseFloat(S.settings.lowBalanceAlert) || 0.01;
-  const bal = (typeof walletViewEth === 'function' ? walletViewEth(w) : null);
-  const eth = (bal == null ? (w.eth || 0) : bal) || 0;
+  const c = chain != null ? chain : (typeof WALLET_VIEW_CHAIN !== 'undefined' ? WALLET_VIEW_CHAIN : 'ethereum');
+  const eth = walletEthOn(w, c);
   if (!walletHasKey(w)) return 'watch';
+  if (eth == null) return 'pending';
   if (eth <= 0) return 'unfunded';
   if (eth < thresh) return 'low';
   return 'ready';
 }
-function walletReadyCounts() {
-  const counts = { ready: 0, low: 0, unfunded: 0, watch: 0 };
-  for (const w of S.wallets) counts[walletReadiness(w)]++;
+function walletReadyCounts(chain) {
+  const counts = { ready: 0, low: 0, unfunded: 0, watch: 0, pending: 0 };
+  for (const w of S.wallets) {
+    const st = walletReadiness(w, chain);
+    counts[st] = (counts[st] || 0) + 1;
+  }
   return counts;
 }
 function walletReadyBadge(state) {
-  const labels = { ready: 'Ready', low: 'Low', unfunded: 'Unfunded', watch: 'Watch-only' };
+  const labels = { ready: 'Ready', low: 'Low', unfunded: 'Unfunded', watch: 'Watch-only', pending: 'Checking' };
   return `<span class="wc-badge ${esc(state)}">${labels[state] || state}</span>`;
+}
+function activeOpChains() {
+  const set = new Set();
+  for (const d of S.drops) set.add(normalizeChainSlug(d.chainSlug || d.chain));
+  for (const t of S.tasks) set.add(itemChain(t));
+  for (const r of S.history.slice(0, 20)) set.add(itemChain(r));
+  if (!set.size) set.add('ethereum');
+  return [...set];
+}
+async function refreshFleetBals(chains) {
+  if (!API_ONLINE || _fleetBalBusy) return false;
+  const need = [...new Set((chains || []).map(normalizeChainSlug).filter(c => c && c !== 'ethereum'))];
+  if (!need.length) return false;
+  if (Date.now() - _fleetBalAt < 15000 && need.every(c => FLEET_BAL[c])) return false;
+  _fleetBalBusy = true;
+  try {
+    await Promise.all(need.map(async c => {
+      try {
+        const { balances } = await RV3_API.walletBalances(c);
+        FLEET_BAL[c] = {};
+        for (const b of balances || []) if (b.eth != null) FLEET_BAL[c][b.id] = b.eth;
+      } catch {
+        if (!FLEET_BAL[c]) FLEET_BAL[c] = {};
+      }
+    }));
+    _fleetBalAt = Date.now();
+    return true;
+  } finally { _fleetBalBusy = false; }
 }
 function cmdRunPill(status) {
   const s = String(status || '');
@@ -1100,7 +1218,7 @@ function taskRetrySkipBtns(t) {
 let _ovPollTimer = null;
 function renderOverview() {
   const c = document.getElementById('content');
-  const wr = walletReadyCounts();
+  const wr = walletReadyCounts('ethereum');
   const liveDrops = S.drops.filter(d => d.phases?.some(p => p.status === 'live'));
   const queued = S.tasks.filter(t => t.status === 'queued');
   const running = S.tasks.filter(t => t.status === 'running' || t.status === 'broadcast');
@@ -1119,18 +1237,43 @@ function renderOverview() {
     ? `${confirmed} confirmed · ${failedHist} failed`
     : (rtt != null ? 'RPC RTT' : 'No runs yet');
 
+  const liveChains = [...new Set(liveDrops.map(d => normalizeChainSlug(d.chainSlug || d.chain)))];
+  const chipChains = ['ethereum', 'robinhood', 'base', 'blast', 'polygon'].filter(ch =>
+    ch === 'ethereum' || ch === 'robinhood'
+    || S.drops.some(d => normalizeChainSlug(d.chainSlug || d.chain) === ch)
+    || S.tasks.some(t => itemChain(t) === ch)
+    || (S.rpcs || []).some(r => r.chain && normalizeChainSlug(r.chain) === ch)
+  );
+  const fireChains = [...new Set([...queued, ...running].map(itemChain))];
+  const needChains = fireChains.length ? fireChains : (liveChains.length ? liveChains : ['ethereum']);
+  const missingRpc = needChains.filter(ch => !chainHasRpc(ch));
+  const focusChain = liveChains[0] || fireChains[0] || 'ethereum';
+  const wrFocus = walletReadyCounts(focusChain);
+
   const detectOk = S.drops.length > 0;
-  const readyOk = wr.ready > 0;
-  const preflightOk = API_ONLINE && S.rpcs.length > 0;
+  const readyOk = wrFocus.ready > 0;
+  const preflightOk = API_ONLINE && S.rpcs.length > 0 && !missingRpc.length;
   const fireActive = running.length > 0;
   const fireArmed = queued.length > 0;
   const pipe = [
     { n: '01', t: 'Detect', s: detectOk ? `${S.drops.length} drop${S.drops.length === 1 ? '' : 's'}` : 'No drops', cls: detectOk ? 'ok' : 'warn', go: 'drops' },
-    { n: '02', t: 'Wallets ready', s: wr.ready ? `${wr.ready} ready` : (S.wallets.length ? `${wr.low + wr.unfunded} need funds` : 'None added'), cls: readyOk ? 'ok' : (S.wallets.length ? 'warn' : 'bad'), go: 'wallets' },
-    { n: '03', t: 'Preflight', s: !API_ONLINE ? 'Backend offline' : (S.rpcs.length ? `${S.rpcs.length} RPC` : 'No RPC'), cls: preflightOk ? 'ok' : 'warn', go: 'settings' },
-    { n: '04', t: 'Fire', s: fireActive ? `${running.length} executing` : (fireArmed ? `${queued.length} armed` : 'Idle'), cls: fireActive ? 'ok' : (fireArmed ? 'warn' : ''), go: 'tasks' },
+    { n: '02', t: 'Wallets ready', s: wrFocus.ready ? `${wrFocus.ready} ready · ${fmtChain(focusChain)}` : (S.wallets.length ? `${wrFocus.low + wrFocus.unfunded} need funds · ${fmtChain(focusChain)}` : 'None added'), cls: readyOk ? 'ok' : (S.wallets.length ? 'warn' : 'bad'), go: 'wallets' },
+    { n: '03', t: 'Preflight', s: !API_ONLINE ? 'Backend offline' : (missingRpc.length ? `No RPC · ${missingRpc.map(fmtChain).join(', ')}` : `${S.rpcs.length} RPC · ${chipChains.map(fmtChain).join(' · ')}`), cls: preflightOk ? 'ok' : 'warn', go: 'settings' },
+    { n: '04', t: 'Fire', s: fireActive ? `${running.length} executing` : (fireArmed ? `${queued.length} armed` : 'Idle'), cls: fireActive ? 'ok' : (fireArmed ? 'warn' : ''), go: fireActive || fireArmed ? 'warroom' : 'tasks' },
     { n: '05', t: 'Track', s: running.length || queued.length ? 'War room live' : `${S.history.length} run${S.history.length === 1 ? '' : 's'}`, cls: (running.length || queued.length) ? 'ok' : '', go: 'warroom' },
   ];
+  const chainRow = `<div class="chain-row">${chipChains.map(ch => {
+    const counts = walletReadyCounts(ch);
+    const liveN = liveDrops.filter(d => normalizeChainSlug(d.chainSlug || d.chain) === ch).length;
+    const fireN = [...queued, ...running].filter(t => itemChain(t) === ch).length;
+    const hot = liveN || fireN;
+    const cls = !chainHasRpc(ch) ? 'warn' : hot ? 'hot' : '';
+    return `<div class="chain-chip ${cls}" onclick="go('wallets')" title="${esc(chainMeta(ch).label)}">
+      <div class="cc-k">${esc(fmtChain(ch))}</div>
+      <div class="cc-v">${counts.ready || '—'}</div>
+      <div class="cc-s">${liveN ? liveN + ' live' : fireN ? fireN + ' firing' : (chainHasRpc(ch) ? 'ready' : 'no RPC')}</div>
+    </div>`;
+  }).join('')}</div>`;
 
   const activity = [
     ...running.map(t => ({ kind: 'task', t, when: t.startedAt || t.time })),
@@ -1148,7 +1291,7 @@ function renderOverview() {
     const live = d.phases.find(p => p.status === 'live');
     return `<div style="padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
       <div style="flex:1">
-        <div style="font-size:12.5px;font-weight:700">${esc(d.name)}</div>
+        <div style="font-size:12.5px;font-weight:700">${esc(d.name)} ${chainChipHTML(d.chainSlug || d.chain)}</div>
         <div style="font-size:10.5px;color:var(--green);margin-top:2px">${esc(live?.label || 'Live')}</div>
       </div>
       <button class="btn btn-p btn-sm" onclick="openModal('${esc(d.id)}')">Mint</button>
@@ -1158,6 +1301,7 @@ function renderOverview() {
   document.getElementById('tba').innerHTML = `<button class="btn btn-sm" onclick="ovRefresh(true)" title="Refresh">⟳ Refresh</button>`;
 
   c.innerHTML = `
+${chainRow}
 <div class="stats-row">
   <div class="sc s-g"><div class="sc-lbl">Wallets ready</div><div class="sc-val">${wr.ready || '—'}</div><div class="sc-sub">${wr.low ? wr.low + ' low' : ''}${wr.low && wr.unfunded ? ' · ' : ''}${wr.unfunded ? wr.unfunded + ' unfunded' : (wr.low || wr.unfunded ? '' : (S.wallets.length ? 'Fleet ready' : 'None added'))}</div></div>
   <div class="sc s-a"><div class="sc-lbl">Armed / running</div><div class="sc-val">${queued.length + running.length || '—'}</div><div class="sc-sub">${queued.length} queued · ${running.length} live</div></div>
@@ -1184,7 +1328,7 @@ ${!S.rpcs.length ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div cl
       return `<div class="rr" onclick="go('warroom')" style="cursor:pointer">
         <div class="rd" style="background:${t.status === 'failed' || t.status === 'reverted' ? 'var(--red)' : (t.status === 'queued' ? 'var(--amber)' : 'var(--accent)')}"></div>
         <div class="ri">
-          <div class="rn">${esc(t.name || t.drop)}</div>
+          <div class="rn">${esc(t.name || t.drop)} <span class="cmd-chain">${esc(fmtChain(itemChain(t)))}</span></div>
           <div class="rm">${esc(fmtRoute(t.route))} · ${t.wallets || 1} wallet${(t.wallets || 1) !== 1 ? 's' : ''}${t.avgBroadcastMs ? ` · ${t.avgBroadcastMs}ms` : ''}</div>
         </div>
         <div class="st ${pill.cls}">${pill.label}</div>
@@ -1196,7 +1340,7 @@ ${!S.rpcs.length ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div cl
     return `<div class="rr">
       <div class="rd" style="background:${(r.status === 'completed' || r.status === 'broadcast' || r.status === 'confirmed') ? 'var(--green)' : r.status === 'failed' ? 'var(--red)' : 'var(--amber)'}"></div>
       <div class="ri">
-        <div class="rn">${esc(r.drop)}</div>
+        <div class="rn">${esc(r.drop)} <span class="cmd-chain">${esc(fmtChain(itemChain(r)))}</span></div>
         <div class="rm">${esc(fmtRoute(r.route))} · ${esc(r.time || '')}</div>
       </div>
       <div class="st ${pill.cls}">${pill.label}</div>
@@ -1211,9 +1355,9 @@ ${!S.rpcs.length ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div cl
     return `<div class="rr">
     <div class="rd" style="background:${(r.status === 'completed' || r.status === 'broadcast' || r.status === 'confirmed') ? 'var(--green)' : r.status === 'failed' ? 'var(--red)' : 'var(--amber)'}"></div>
     <div class="ri">
-      <div class="rn">${esc(r.drop)}</div>
+      <div class="rn">${esc(r.drop)} <span class="cmd-chain">${esc(fmtChain(itemChain(r)))}</span></div>
       <div class="rm">${esc(fmtRoute(r.route))} · ${r.wallets || 0} wallet${(r.wallets || 0) !== 1 ? 's' : ''}${(r.avgBroadcastMs || r.avgConfirmMs) ? ` · ${r.avgBroadcastMs || r.avgConfirmMs}ms` : ''} · ${esc(r.time || '')}</div>
-      ${r.txHash ? `<div style="font-size:10px;margin-top:2px"><a href="https://etherscan.io/tx/${r.txHash}" target="_blank" rel="noopener" style="color:var(--accent3);text-decoration:none">↗ ${r.txHash.slice(0,14)}…</a></div>` : ''}
+      ${r.txHash ? `<div style="font-size:10px;margin-top:2px">${txLinkHTML(itemChain(r), r.txHash, r.txHash.slice(0,14)+'…')}</div>` : ''}
     </div>
     <div class="st ${pill.cls}">${pill.label}</div>
   </div>`;
@@ -1254,13 +1398,19 @@ ${!S.rpcs.length ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div cl
       }
       ovRefresh(false);
     }, 4000);
+    refreshFleetBals(activeOpChains()).then(changed => {
+      if (changed && document.getElementById('nav-overview')?.classList.contains('act')) renderOverview();
+    });
   }
 }
 
 async function ovRefresh(manual) {
   if (!document.getElementById('nav-overview')?.classList.contains('act') && !manual) return;
   try {
-    if (API_ONLINE) await syncFromServer();
+    if (API_ONLINE) {
+      await syncFromServer();
+      await refreshFleetBals(activeOpChains());
+    }
     if (document.getElementById('nav-overview')?.classList.contains('act')) renderOverview();
   } catch { /* */ }
 }
@@ -1443,7 +1593,11 @@ async function walletViewChain(chain) {
     renderWallets();
     try {
       const { balances } = await RV3_API.walletBalances(chain);
-      for (const b of balances) if (b.eth != null) WALLET_CHAIN_BAL[b.id] = b.eth;
+      for (const b of balances) if (b.eth != null) {
+        WALLET_CHAIN_BAL[b.id] = b.eth;
+        FLEET_BAL[chain] = FLEET_BAL[chain] || {};
+        FLEET_BAL[chain][b.id] = b.eth;
+      }
     } catch (e) { toast(e.message || `Balance fetch failed on ${chain}`, '⚠'); }
   }
   renderWallets();
@@ -1811,7 +1965,7 @@ function renderTasks() {
     const hasSchedule = isQueued && t.scheduledFor;
     const sched = hasSchedule ? `<div id="cd-${esc(t.id)}" style="font-size:10px;color:var(--amber);margin-top:2px;font-family:var(--mono)">…</div>` : '';
     const priorityBadge = t.priority ? `<span style="font-size:9px;color:var(--amber);font-weight:700;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);border-radius:3px;padding:1px 5px;margin-right:4px">PRIORITY</span>` : '';
-    const txLink = t.txHashes?.length ? `<div style="font-size:10px;margin-top:2px"><a href="https://etherscan.io/tx/${t.txHashes[0]}" target="_blank" rel="noopener" style="color:#60a5fa;text-decoration:none">↗ ${t.txHashes[0].slice(0,14)}…${isConfirmed ? ` · block ${t.blockNumber}` : ''}</a></div>` : '';
+    const txLink = t.txHashes?.length ? `<div style="font-size:10px;margin-top:2px">${txLinkHTML(itemChain(t), t.txHashes[0], t.txHashes[0].slice(0,14)+'…')}${isConfirmed ? ` · block ${t.blockNumber}` : ''}</div>` : '';
     const errorLine = (t.status === 'failed' || isReverted) && t.error ? `<div style="font-size:10px;color:var(--red);margin-top:2px;font-family:var(--mono)" title="${esc(t.error)}">✗ ${esc(t.error.length > 90 ? t.error.slice(0,90)+'…' : t.error)}</div>` : '';
     const statusLabel = isBroadcast ? 'SENT' : isConfirmed ? 'CONFIRMED' : isReverted ? 'REVERTED' : isSkipped ? 'SKIPPED' : t.status.toUpperCase();
     return `
@@ -1819,7 +1973,7 @@ function renderTasks() {
     <div class="rd" style="background:${dotColor}"></div>
     <div class="ri">
       <div class="rn">${priorityBadge}${esc(t.name || t.drop)}</div>
-      <div class="rm">${esc(fmtRoute(t.route))} · ${t.wallets} wallet${t.wallets !== 1 ? 's' : ''} · qty ${t.qty}${t.time ? ' · ' + esc(t.time) : ''}</div>
+      <div class="rm">${chainChipHTML(itemChain(t))} ${esc(fmtRoute(t.route))} · ${t.wallets} wallet${t.wallets !== 1 ? 's' : ''} · qty ${t.qty}${t.time ? ' · ' + esc(t.time) : ''}</div>
       ${sched}${txLink}${errorLine}
     </div>
     ${speed}
@@ -1901,12 +2055,12 @@ async function taskRetry(id) {
     const { task: clone } = await RV3_API.retryTask(id, task);
     if (clone) S.tasks.unshift(clone);
     saveState(); updateBadges();
-    toast('Retry queued — fire from Tasks or War room','✓');
+    toast('Retry queued — fire from War room','✓');
     const onWar = document.getElementById('nav-warroom')?.classList.contains('act');
     const onOv = document.getElementById('nav-overview')?.classList.contains('act');
     if (onWar) renderWarRoom();
     else if (onOv) renderOverview();
-    else go('tasks');
+    else go('warroom');
   } catch (e) {
     toast(e.message || 'Retry failed','⚠');
   }
@@ -1949,7 +2103,7 @@ async function taskRunNow(id) {
     toast('Broadcast — polling for confirmation','✓');
     // Update local state and start polling
     if (task) { task.status = 'broadcast'; saveState(); }
-    go('tasks');
+    go('warroom');
     setTimeout(() => pollReceipt(id), 5000);
   } catch (e) {
     toast(e.message || 'Failed to trigger task','⚠');
@@ -1990,16 +2144,16 @@ function renderWarRoom() {
     const pill = cmdRunPill(t.status);
     const wr = t.walletResults || [];
     const wallets = wr.length
-      ? wr.map(r => `<div class="wr-wrow">${r.ok ? '✓' : '✗'} ${esc(r.name || r.walletId)}${r.ms ? ` · ${r.ms}ms` : ''}${r.hash ? ` · <a href="https://etherscan.io/tx/${esc(r.hash)}" target="_blank" rel="noopener" style="color:var(--accent3);text-decoration:none">${esc(r.hash.slice(0,10))}…</a>` : ''}${r.error ? ` · <span style="color:var(--red)">${esc(String(r.error).slice(0,80))}</span>` : ''}</div>`).join('')
+      ? wr.map(r => `<div class="wr-wrow">${r.ok ? '✓' : '✗'} ${esc(r.name || r.walletId)}${r.ms ? ` · ${r.ms}ms` : ''}${r.hash ? ` · ${txLinkHTML(itemChain(t), r.hash, r.hash.slice(0,10)+'…')}` : ''}${r.error ? ` · <span style="color:var(--red)">${esc(String(r.error).slice(0,80))}</span>` : ''}</div>`).join('')
       : `${t.wallets || 1} wallet${(t.wallets || 1) !== 1 ? 's' : ''}`;
     const speed = t.avgBroadcastMs || t.avgAttemptMs || '';
     const tx = t.txHashes?.[0] || t.txHash;
     return `<tr>
-      <td><div style="font-weight:700">${esc(t.name || t.drop)}</div><div style="font-size:10px;color:var(--text3)">${esc(fmtRoute(t.route))}</div></td>
+      <td><div style="font-weight:700">${esc(t.name || t.drop)}</div><div style="font-size:10px;color:var(--text3)">${chainChipHTML(itemChain(t))} ${esc(fmtRoute(t.route))}</div></td>
       <td>${wallets}</td>
       <td><div class="st ${pill.cls}">${pill.label}</div></td>
       <td style="font-family:var(--mono);font-size:11px">${speed ? speed + 'ms' : '—'}</td>
-      <td>${tx ? `<a href="https://etherscan.io/tx/${esc(tx)}" target="_blank" rel="noopener" style="color:var(--accent3);text-decoration:none">${esc(tx.slice(0,12))}…</a>` : '—'}</td>
+      <td>${tx ? txLinkHTML(itemChain(t), tx) : '—'}</td>
       <td style="white-space:nowrap">${t.status === 'queued' ? `<button class="btn btn-p btn-xs" onclick="taskRunNow('${esc(t.id)}')">▶ Now</button>` : ''}${taskRetrySkipBtns(t)}</td>
     </tr>`;
   };
@@ -2037,6 +2191,7 @@ async function wrRefresh(manual) {
   try {
     if (API_ONLINE) {
       await syncFromServer();
+      await refreshFleetBals(activeOpChains());
       try { await RV3_API.health(); } catch {}
     }
     if (document.getElementById('nav-warroom')?.classList.contains('act')) renderWarRoom();
@@ -2149,13 +2304,11 @@ function cmTargetsHTML() {
 function cmFeedHTML() {
   const feed = S.copymint.feed || [];
   if (!feed.length) return `<div class="es"><div class="es-icon">◷</div><div class="es-title">No activity yet</div><div class="es-sub">Detected mints and copies appear here in real time</div></div>`;
-  const chainExplorer = { ethereum: 'https://etherscan.io/tx/', base: 'https://basescan.org/tx/', blast: 'https://blastscan.io/tx/', polygon: 'https://polygonscan.com/tx/', robinhood: 'https://robinhoodchain.blockscout.com/tx/' };
   return feed.map(f => {
     const color = f.status === 'copied' ? 'var(--green)' : f.status === 'failed' ? 'var(--red)' : f.status === 'simulated' ? 'var(--accent3)' : 'var(--amber)';
-    const exp = chainExplorer[f.chain] || 'https://etherscan.io/tx/';
-    const srcLink = f.mintTxHash ? `<a href="${exp}${f.mintTxHash}" target="_blank" rel="noopener" style="color:#60a5fa;text-decoration:none">↗ src ${esc(f.mintTxHash.slice(0,10))}…</a>` : '';
+    const srcLink = f.mintTxHash ? txLinkHTML(f.chain, f.mintTxHash, 'src ' + f.mintTxHash.slice(0,10) + '…') : '';
     const copies = (f.replicated || []).map(r => r.ok
-      ? `<a href="${exp}${r.hash}" target="_blank" rel="noopener" style="color:var(--green);text-decoration:none">↗ ${esc(r.wallet)}</a>`
+      ? txLinkHTML(f.chain, r.hash, r.wallet)
       : `<span style="color:var(--red)" title="${esc(r.error || '')}">✗ ${esc(r.wallet)}</span>`).join(' · ');
     return `
   <div class="rr">
@@ -2446,16 +2599,16 @@ function renderHistory() {
 <div class="card">
   ${S.history.map(r=>`
   <div class="rr">
-    <div class="rd" style="background:${r.status==='completed'?'var(--green)':r.status==='failed'?'var(--red)':'var(--amber)'}"></div>
+    <div class="rd" style="background:${r.status==='completed'||r.status==='confirmed'||r.status==='broadcast'?'var(--green)':r.status==='failed'||r.status==='reverted'?'var(--red)':'var(--amber)'}"></div>
     <div class="ri">
-      <div class="rn">${esc(r.drop)}</div>
+      <div class="rn">${esc(r.drop)} ${chainChipHTML(itemChain(r))}</div>
       <div class="rm">${esc(fmtRoute(r.route))} · ${r.wallets} wallet${r.wallets!==1?'s':''} · qty ${r.qty||1} · ${esc(r.time)}</div>
+      ${r.txHash ? `<div style="font-size:10px;margin-top:2px">${txLinkHTML(itemChain(r), r.txHash, r.txHash.slice(0,14)+'…')}</div>` : ''}
     </div>
     <div style="text-align:right;font-size:10px;color:var(--text3);margin-right:8px;flex-shrink:0">
       <div>${r.minted||0}/${(r.wallets||1)*(r.qty||1)} minted</div>
-      ${r.txHash?`<div style="font-family:var(--mono);margin-top:1px">${esc(r.txHash)}</div>`:''}
     </div>
-    <div class="st st-${r.status==='completed'?'ok':r.status==='failed'?'fail':'part'}">${r.status.toUpperCase()}</div>
+    <div class="st ${cmdRunPill(r.status).cls}">${cmdRunPill(r.status).label}</div>
   </div>`).join('')}
 </div>
 <div class="section-lbl">Execution log</div>
@@ -2579,7 +2732,10 @@ function renderSettings() {
         <div class="fg"><label class="fl">Label</label><input class="fi" id="rpc-new-name" placeholder="e.g. Alchemy mainnet" maxlength="30"></div>
         <div class="fg"><label class="fl">Role</label><select class="fs" id="rpc-new-role"><option value="Primary">Primary</option><option value="Blast">Blast</option><option value="Private">Private</option></select></div>
       </div>
-      <div class="fg"><label class="fl">RPC URL</label><input class="fi" id="rpc-new-url" placeholder="https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY" type="url"></div>
+      <div class="frow">
+        <div class="fg"><label class="fl">Chain</label><select class="fs" id="rpc-new-chain"><option value="ethereum">Ethereum</option><option value="robinhood">Robinhood</option><option value="base">Base</option><option value="blast">Blast</option><option value="polygon">Polygon</option></select></div>
+        <div class="fg"><label class="fl">RPC URL</label><input class="fi" id="rpc-new-url" placeholder="https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY" type="url"></div>
+      </div>
       <div style="display:flex;gap:7px">
         <button class="btn btn-p btn-sm" onclick="rpcSave()">Save endpoint</button>
         <button class="btn btn-sm" onclick="document.getElementById('rpc-add-form').style.display='none'">Cancel</button>
@@ -2769,6 +2925,7 @@ function rpcRowHTML(r) {
     <div class="rpc-fire${r.active&&!r.err?' active':''}${r.err?' error':''}"></div>
     <span class="rpc-name">${esc(r.name)}</span>
     <span class="rpc-role rr-${allowRpcRole(r.role)}">${esc(r.role||'Private')}</span>
+    ${r.chain ? `<span class="ct ${chainBadgeClass(r.chain)}" style="font-size:9px">◆ ${esc(fmtChain(r.chain))}</span>` : ''}
     <span class="rpc-url">${esc(r.url)}</span>
     <span class="rpc-ms" style="${msColor}">${msLabel}</span>
     <span style="cursor:pointer;color:var(--text3);padding:2px 4px;font-size:12px" onclick="rpcPing('${esc(r.id)}')" title="Ping">◎</span>
@@ -2786,8 +2943,9 @@ function rpcSave() {
   const url = document.getElementById('rpc-new-url')?.value?.trim();
   if(!name) { toast('Enter a label','⚠'); return; }
   if(!url || !isHttpsUrl(url)) { toast('Enter a valid HTTPS URL','⚠'); return; }
+  const chain = document.getElementById('rpc-new-chain')?.value || inferChainFromRpcUrl(url) || 'ethereum';
   const id = 'rpc_' + Date.now();
-  S.rpcs.push({ id, name, role, url, ms: null, active: true });
+  S.rpcs.push({ id, name, role, url, chain, ms: null, active: true });
   saveState(); updateBadges();
   document.getElementById('rpc-add-form').style.display = 'none';
   document.getElementById('rpc-new-name').value = '';
@@ -2905,7 +3063,7 @@ function openModal(dropId) {
   // Populate drop selector
   const dsel = document.getElementById('m-drop');
   dsel.innerHTML = S.drops.length
-    ? S.drops.map(d=>`<option value="${esc(d.id)}">${esc(d.name)} — ${esc(d.addr)}</option>`).join('')
+    ? S.drops.map(d=>`<option value="${esc(d.id)}">${esc(d.name)} — ${esc(fmtChain(d.chainSlug || d.chain))} — ${esc(d.addr)}</option>`).join('')
     : '<option value="">No drops — add one first</option>';
   if(dropId) { const opt = Array.from(dsel.options).find(o=>o.value===dropId); if(opt) opt.selected=true; }
   mUpdateDrop();
@@ -2931,6 +3089,16 @@ function closeModal() {
   if(S.countdownInterval) { clearInterval(S.countdownInterval); S.countdownInterval = null; }
 }
 
+function mSyncRouteOptions(chain) {
+  const eth = normalizeChainSlug(chain) === 'ethereum';
+  const sel = document.getElementById('m-route');
+  if (!sel) return;
+  [...sel.options].forEach(o => {
+    if (o.value === 'fb_protect' || o.value === 'fb_bundle') o.hidden = !eth;
+  });
+  if (!eth && (sel.value === 'fb_protect' || sel.value === 'fb_bundle')) sel.value = 'direct_rpc';
+}
+
 function mUpdateDrop() {
   const dropId = document.getElementById('m-drop')?.value;
   const drop = S.drops.find(d=>d.id===dropId);
@@ -2938,7 +3106,14 @@ function mUpdateDrop() {
   psel.innerHTML = drop && drop.phases?.length
     ? drop.phases.map((p,i)=>`<option value="${i}">${esc(phaseTypeBadge(p.type))} · ${esc(p.label||'')} · ${esc(p.status||'')}</option>`).join('')
     : '<option value="">No phases detected</option>';
+  mSyncRouteOptions(drop?.chainSlug || drop?.chain);
   mUpdatePhase(); mCalcEst();
+  if (drop) refreshFleetBals([normalizeChainSlug(drop.chainSlug || drop.chain)]).then(changed => {
+    if (changed && document.getElementById('taskModal')?.classList.contains('show')) {
+      const { drop: d, phase, idx } = mCurrentPhase();
+      mPopulateWallets(mGetWalletElig(d, phase, idx));
+    }
+  });
 }
 
 function mCurrentPhase() {
@@ -3174,7 +3349,7 @@ async function mSubmit() {
     rpcBlast: S.settings.rpcBlast !== false,
     rpcPrewarm: S.settings.rpcPrewarm !== false,
     rpcCount: S.rpcs.length,
-    rpcUrls: S.rpcs.map(r => r.urlFull || r.url).filter(u => u.startsWith('https://')),
+    rpcUrls: rpcUrlsForChain(drop.chainSlug || 'ethereum'),
   };
   try {
     if (API_ONLINE) {
@@ -3182,9 +3357,9 @@ async function mSubmit() {
       S.tasks.unshift(task);
       saveState(); updateBadges();
       closeModal();
-      toast(`Task queued on worker — ${selectedWallets} wallet${selectedWallets!==1?'s':''}`,'⚡');
-      addNotif('Task queued', `${task.name} · worker processing`, 'info');
-      if(document.getElementById('nav-tasks')?.classList.contains('act')) go('tasks');
+      toast(`Task queued — tracking in War room`,'⚡');
+      addNotif('Task queued', `${task.name} · ${fmtChain(task.chainSlug)}`, 'info');
+      go('warroom');
       return;
     }
   } catch (e) {
@@ -3196,7 +3371,7 @@ async function mSubmit() {
   saveState(); updateBadges();
   closeModal();
   toast(`Task saved locally — start backend to execute`,'ℹ');
-  if(document.getElementById('nav-tasks')?.classList.contains('act')) go('tasks');
+  go('warroom');
 }
 
 // Populate wallet selector in modal
@@ -3207,27 +3382,35 @@ function mPopulateWallets(eligMap) {
     grid.innerHTML = '<div style="font-size:11px;color:var(--text3);grid-column:1/-1">No wallets added — go to Wallets tab.</div>';
     return;
   }
-  const lowBal = parseFloat(S.settings.lowBalanceAlert) || 0.001;
+  const dropId = document.getElementById('m-drop')?.value;
+  const drop = S.drops.find(d => d.id === dropId);
+  const chain = drop ? normalizeChainSlug(drop.chainSlug || drop.chain) : 'ethereum';
   const elig = eligMap || {};
+  const readyN = S.wallets.filter(w => walletReadiness(w, chain) === 'ready').length;
   grid.innerHTML = S.wallets.map(w=>{
     const e = elig[w.id];
-    const low = w.eth < lowBal;
+    const eth = walletEthOn(w, chain);
+    const ready = walletReadiness(w, chain);
+    const low = ready === 'low' || ready === 'unfunded' || ready === 'watch';
     let cls = 'ws';
     let badge = '';
-    let disabled = low;
-    if (low) cls += ' nobal';
+    let disabled = low || !walletHasKey(w);
+    if (low || !walletHasKey(w)) cls += ' nobal';
     else if (e?.eligible === false) { cls += ' inelig'; disabled = true; badge = '<span class="ws-e no">✗</span>'; }
     else if (e?.eligible === true) { badge = '<span class="ws-e ok">✓</span>'; }
     else if (e?.eligible === null) { cls += ' elig-pend'; badge = '<span class="ws-e pend">?</span>'; }
     const title = e?.reason ? ` title="${esc(e.reason)}"` : '';
+    const balLbl = eth == null ? '…' : eth.toFixed(4) + ' ETH';
     return `
     <div class="${cls}" onclick="mToggleWallet(this)"${title}>
       <input type="checkbox" ${disabled?'disabled':''}>
       <span class="ws-n">${esc(w.name)}</span>
       ${badge}
-      <span class="ws-b">${w.eth.toFixed(4)} ETH</span>
+      <span class="ws-b">${balLbl}${chain !== 'ethereum' ? ' · ' + fmtChain(chain) : ''}</span>
     </div>`;
   }).join('');
+  const note = document.getElementById('m-elig-note');
+  if (note && !note.textContent) note.textContent = `${readyN} ready on ${chainMeta(chain).label}`;
 }
 
 // TOAST
@@ -3702,6 +3885,7 @@ const CHANGELOG = [
       {tag:'new', text:'Wallet readiness states (Ready / Low / Unfunded / Watch-only) with filter tabs on the Wallets page'},
       {tag:'new', text:'War room: live fire-lane table, per-wallet results, streaming log'},
       {tag:'new', text:'Retry failed/reverted tasks (failed wallets only when known) and Skip to leave the fire lane'},
+      {tag:'fix', text:'Every chain stays isolated: ETH / RH / Base / Blast / Polygon explorers, RPCs, and fleet balances — a Base mint never hits Ethereum RPC'},
     ]
   },
   {
@@ -3977,7 +4161,9 @@ function renderGuide() {
   <li><strong>Delegation batch</strong> — Deploy your own RV3BatchMinter contract, then one transaction mints the drop N times (batchMint), NFTs land in the contract, and one-click Sweep/Withdraw pull them out. Open the Delegation page.</li>
 </ul>
 <h4>Mint speed</h4>
-<p>Confirmation time in milliseconds is tracked per transaction and averaged across wallets in each run. Visible on the Tasks page, History, and the Overview stats card.</p>`
+<p>Confirmation time in milliseconds is tracked per transaction and averaged across wallets in each run. Visible on Command, War room, Tasks, and History. Tx links open the explorer for that drop’s chain (Etherscan, Basescan, Blastscan, Polygonscan, or Robinhood Blockscout).</p>
+<h4>Command → War room</h4>
+<p>Arm a task from Detect or Drops. Command shows fleet readiness per chain. Fire jumps to War room for live per-wallet results. Failed rows Retry (failed wallets only) or Skip.</p>`
     },
     {
       icon: '⬡',

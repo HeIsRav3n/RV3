@@ -98,7 +98,7 @@ async function processMintTask(task) {
   const urls = tx.pickSendUrls(task.route, task.rpcUrls || [], chainSlug);
   if (!urls.length) {
     task.status = 'failed';
-    task.error = 'No RPC — set ETH_RPC_PRIMARY in .env';
+    task.error = `No RPC for ${chainSlug} — add a ${chainSlug} endpoint in Settings (or set the matching *_RPC_PRIMARY env)`;
     save();
     return;
   }
@@ -122,6 +122,7 @@ async function processMintTask(task) {
       id: `run_${Date.now()}`, type: 'mint', drop: task.drop, route: task.route,
       wallets: task.wallets, qty: task.qty, time: new Date().toLocaleString(),
       status: 'completed', minted: 0, gasCostUsd: 0, note: task.note, openseaSlug: task.openseaSlug,
+      chainSlug: task.chainSlug || chainSlug,
     });
     await notify.send('RV3 preflight OK', `${task.drop} · ${okRpc} RPCs`);
     return;
@@ -162,6 +163,7 @@ async function processMintTask(task) {
       avgBroadcastMs: result.avgBroadcastMs,
       txHash: result.txHashes[0] || null, note: task.note, openseaSlug: task.openseaSlug,
       walletResults: task.walletResults, taskId: task.id,
+      chainSlug: task.chainSlug || chainSlug,
     });
     await notify.send(`RV3 mint ${task.status}`, `${task.drop} · ${task.note}`);
   } catch (e) {

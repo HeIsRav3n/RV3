@@ -35,7 +35,7 @@ async function executeMintForWallet(walletEntry, task, log) {
     ? routes.normalizeRoute(task.route)
     : routes.ROUTES.DIRECT_RPC;
   const sendUrls = tx.pickSendUrls(effRoute, task.rpcUrls || [], chainSlug);
-  if (!sendUrls.length) throw new Error('No RPC available');
+  if (!sendUrls.length) throw new Error(`No RPC for ${chainSlug} — add a ${chainSlug} endpoint in Settings`);
 
   const fastest = await rpc.getFastestUrl(sendUrls);
 
@@ -140,7 +140,7 @@ async function signMintForWallet(walletEntry, task, fastest, log) {
  */
 async function runBundleMintTask(task, selected, log) {
   const sendUrls = tx.pickSendUrls(routes.ROUTES.DIRECT_RPC, task.rpcUrls || [], 'ethereum');
-  if (!sendUrls.length) throw new Error('No RPC available');
+  if (!sendUrls.length) throw new Error('No RPC for ethereum — add an Ethereum endpoint in Settings');
   const fastest = await rpc.getFastestUrl(sendUrls);
   const start = Date.now();
 
