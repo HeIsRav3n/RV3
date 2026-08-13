@@ -47,6 +47,9 @@ const config = {
   // env RPC above (dedup by chain+role happens right after).
   defaultRpcs: [
     { id: 'default_robinhood', name: 'Robinhood Chain (public)', role: 'Primary', url: 'https://rpc.mainnet.chain.robinhood.com', chain: 'robinhood', ms: null, active: true, fromEnv: false, isDefault: true },
+    { id: 'default_base', name: 'Base (public)', role: 'Primary', url: 'https://mainnet.base.org', chain: 'base', ms: null, active: true, fromEnv: false, isDefault: true },
+    { id: 'default_blast', name: 'Blast (public)', role: 'Primary', url: 'https://rpc.blast.io', chain: 'blast', ms: null, active: true, fromEnv: false, isDefault: true },
+    { id: 'default_polygon', name: 'Polygon (public)', role: 'Primary', url: 'https://polygon-rpc.com', chain: 'polygon', ms: null, active: true, fromEnv: false, isDefault: true },
   ],
   builderRpcs: [
     pickBuilder('ETH_BUILDER_TITAN'),

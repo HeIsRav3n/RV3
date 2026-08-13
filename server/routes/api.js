@@ -152,6 +152,7 @@ router.get('/rpc/env', (req, res) => {
       id: r.id,
       name: r.name || r.id,
       role: r.role,
+      chain: r.chain || 'ethereum',
       url: rpc.maskUrl(r.url),
       urlFull: r.url,
       fromEnv: true,
@@ -418,11 +419,80 @@ router.post('/tasks/:id/prewarm', async (req, res) => {
     if (!task.openseaSlug) return res.status(400).json({ error: 'No OpenSea slug on task' });
     const wallets = await walletStore.loadWallets().catch(() => state().wallets);
     const log = (level, msg) => store.appendLog(state(), level, msg);
-    await prewarm.prewarmTask(task, wallets, log);
-    const warmed = wallets
-      .filter(w => w.encryptedKey).slice(0, task.wallets || 1)
-      .filter(w => prewarm.isReady(task.id, w.id)).length;
-    res.json({ ok: true, warmed });
+    const result = await prewarm.prewarmTask(task, wallets, log);
+    const warmed = result?.warmed ?? 0;
+    task.warmed = warmed;
+    task.prewarmedAt = new Date().toISOString();
+    await taskStore.updateTaskStatus(task.id, task.status, { warmed, prewarmedAt: task.prewarmedAt });
+    worker.save();
+    res.json({ ok: true, warmed, wallets: result?.wallets || [] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+function preflightTaskRow(task, wallets) {
+  const chain = rpc.normalizeChain(task.chainSlug || 'ethereum');
+  const urls = rpc.allRpcUrls(task.rpcUrls || [], chain);
+  const warm = prewarm.taskWarmStatus(task, wallets);
+  const need = warm.length || task.wallets || 1;
+  const keyed = wallets.filter(w => w.encryptedKey).length;
+  return {
+    id: task.id,
+    name: task.name || task.drop,
+    drop: task.drop,
+    status: task.status,
+    chainSlug: chain,
+    route: task.route,
+    wallets: need,
+    slug: !!task.openseaSlug,
+    rpcOk: urls.length > 0,
+    rpcCount: urls.length,
+    keysOk: keyed >= need,
+    warmed: warm.filter(w => w.ok).length,
+    warm,
+    ready: urls.length > 0 && !!task.openseaSlug && keyed >= need && warm.length > 0 && warm.every(w => w.ok),
+  };
+}
+
+router.get('/preflight', async (req, res) => {
+  try {
+    const wallets = await walletStore.loadWallets().catch(() => state().wallets);
+    const queued = state().tasks.filter(t => t.status === 'queued');
+    const chains = [...new Set(queued.map(t => rpc.normalizeChain(t.chainSlug || 'ethereum')))];
+    if (!chains.length) chains.push('ethereum');
+    res.json({
+      liveMint: !!config.enableLiveMint,
+      tasks: queued.map(t => preflightTaskRow(t, wallets)),
+      chains: chains.map(chain => ({
+        chain,
+        rpc: rpc.allRpcUrls([], chain).length,
+      })),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/preflight', taskLimiter, async (req, res) => {
+  try {
+    const wallets = await walletStore.loadWallets().catch(() => state().wallets);
+    const queued = state().tasks.filter(t => t.status === 'queued');
+    const log = (level, msg) => store.appendLog(state(), level, msg);
+    const results = [];
+    for (const task of queued) {
+      if (!task.openseaSlug) {
+        results.push({ id: task.id, error: 'No OpenSea slug', warmed: 0, wallets: [] });
+        continue;
+      }
+      const result = await prewarm.prewarmTask(task, wallets, log);
+      task.warmed = result.warmed;
+      task.prewarmedAt = new Date().toISOString();
+      await taskStore.updateTaskStatus(task.id, task.status, { warmed: task.warmed, prewarmedAt: task.prewarmedAt }).catch(() => {});
+      results.push({ id: task.id, ...result, row: preflightTaskRow(task, wallets) });
+    }
+    worker.save();
+    res.json({ results, tasks: queued.map(t => preflightTaskRow(t, wallets)) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -468,11 +538,13 @@ router.post('/tasks/:id/run', async (req, res) => {
       task.txHashes = result.txHashes;
       task.avgBroadcastMs = result.avgBroadcastMs;
       task.avgAttemptMs = result.avgAttemptMs;
+      task.walletResults = result.walletResults || [];
       task.error = result.errors.length ? result.errors[0] : null;
       task.finishedAt = new Date().toISOString();
       await taskStore.updateTaskStatus(task.id, task.status, {
         minted: task.minted, txHashes: task.txHashes,
         avgBroadcastMs: task.avgBroadcastMs, avgAttemptMs: task.avgAttemptMs,
+        walletResults: task.walletResults,
         error: task.error, finishedAt: task.finishedAt,
       });
       const note = result.txHashes.length
@@ -501,6 +573,71 @@ router.post('/tasks/:id/run', async (req, res) => {
     }
   } catch (e) {
     if (!res.headersSent) res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/tasks/:id/retry', taskLimiter, async (req, res) => {
+  try {
+    const src = await resolveTask(req.params.id, req.body?.task);
+    if (!src) return res.status(404).json({ error: 'Task not found' });
+    if (!['failed', 'reverted'].includes(src.status)) {
+      return res.status(400).json({ error: `Cannot retry a ${src.status} task` });
+    }
+    const failedIds = (src.walletResults || []).filter(r => !r.ok && r.walletId).map(r => r.walletId);
+    const clone = {};
+    for (const [k, v] of Object.entries(src)) {
+      if (k.startsWith('pw_')) continue;
+      clone[k] = v;
+    }
+    clone.id = `task_${Date.now()}`;
+    clone.status = 'queued';
+    clone.priority = true;
+    clone.error = null;
+    clone.note = null;
+    clone.txHashes = [];
+    clone.walletResults = [];
+    clone.minted = 0;
+    clone.finishedAt = null;
+    clone.startedAt = null;
+    clone.blockNumber = null;
+    clone.gasUsed = null;
+    clone.avgBroadcastMs = null;
+    clone.avgAttemptMs = null;
+    clone.retriedFrom = src.id;
+    clone.time = new Date().toLocaleString();
+    clone.createdAt = new Date().toISOString();
+    if (failedIds.length) {
+      clone.retryWalletIds = failedIds;
+      clone.wallets = failedIds.length;
+    } else {
+      delete clone.retryWalletIds;
+    }
+    const s = state();
+    s.tasks.unshift(clone);
+    store.appendLog(s, 'info', `Retry queued: ${clone.name || clone.drop} (from ${src.id})`);
+    worker.save();
+    taskStore.saveTask(clone).catch(() => {});
+    res.json({ task: clone });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/tasks/:id/skip', async (req, res) => {
+  try {
+    const task = await resolveTask(req.params.id, req.body?.task);
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (!['queued', 'failed', 'reverted'].includes(task.status)) {
+      return res.status(400).json({ error: `Cannot skip a ${task.status} task` });
+    }
+    task.status = 'skipped';
+    task.finishedAt = new Date().toISOString();
+    await taskStore.saveTask(task);
+    worker.save();
+    store.appendLog(state(), 'info', `Task skipped: ${task.name || task.drop}`);
+    res.json({ ok: true, status: 'skipped' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 

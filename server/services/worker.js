@@ -14,6 +14,7 @@ const prices = require('./prices');
 const walletStore = require('./wallets');
 const prewarm = require('./prewarm');
 const copymint = require('./copymint');
+const taskStore = require('./taskStore');
 
 let running = false;
 let state = store.load();
@@ -59,8 +60,8 @@ async function prewarmPending() {
     return !at || (at - now) <= 30_000;
   });
   for (const task of candidates) {
-    const selected = state.wallets.filter(w => w.encryptedKey).slice(0, task.wallets || 1);
-    const hasPrewarm = selected.every(w => prewarm.isReady(task.id, w.id));
+    const selected = prewarm.selectPrewarmWallets(task, state.wallets);
+    const hasPrewarm = selected.length && selected.every(w => prewarm.isReady(task.id, w.id));
     if (!hasPrewarm) {
       const log = (level, msg) => store.appendLog(state, level, msg);
       prewarm.prewarmTask(task, state.wallets, log).catch(() => {});
@@ -97,7 +98,7 @@ async function processMintTask(task) {
   const urls = tx.pickSendUrls(task.route, task.rpcUrls || [], chainSlug);
   if (!urls.length) {
     task.status = 'failed';
-    task.error = 'No RPC — set ETH_RPC_PRIMARY in .env';
+    task.error = `No RPC for ${chainSlug} — add a ${chainSlug} endpoint in Settings (or set the matching *_RPC_PRIMARY env)`;
     save();
     return;
   }
@@ -121,6 +122,7 @@ async function processMintTask(task) {
       id: `run_${Date.now()}`, type: 'mint', drop: task.drop, route: task.route,
       wallets: task.wallets, qty: task.qty, time: new Date().toLocaleString(),
       status: 'completed', minted: 0, gasCostUsd: 0, note: task.note, openseaSlug: task.openseaSlug,
+      chainSlug: task.chainSlug || chainSlug,
     });
     await notify.send('RV3 preflight OK', `${task.drop} · ${okRpc} RPCs`);
     return;
@@ -144,12 +146,14 @@ async function processMintTask(task) {
     task.minted = result.minted;
     task.txHashes = result.txHashes;
     task.avgBroadcastMs = result.avgBroadcastMs;
+    task.walletResults = result.walletResults || [];
     task.error = result.errors.length ? result.errors.join('; ') : null;
     task.note = result.txHashes.length > 0
       ? `${result.txHashes.length} tx(s) broadcast in ${result.avgBroadcastMs}ms`
       : task.error;
     task.finishedAt = new Date().toISOString();
     save();
+    taskStore.saveTask(task).catch(() => {});
 
     await finishRun({
       id: `run_${Date.now()}`, type: 'mint', drop: task.drop, route: task.route,
@@ -158,6 +162,8 @@ async function processMintTask(task) {
       minted: result.minted, gasEth, gasCostUsd,
       avgBroadcastMs: result.avgBroadcastMs,
       txHash: result.txHashes[0] || null, note: task.note, openseaSlug: task.openseaSlug,
+      walletResults: task.walletResults, taskId: task.id,
+      chainSlug: task.chainSlug || chainSlug,
     });
     await notify.send(`RV3 mint ${task.status}`, `${task.drop} · ${task.note}`);
   } catch (e) {
@@ -165,6 +171,7 @@ async function processMintTask(task) {
     task.error = e.message;
     task.finishedAt = new Date().toISOString();
     save();
+    taskStore.saveTask(task).catch(() => {});
     log('err', e.message);
     await notify.send('RV3 mint failed', `${task.drop} · ${e.message}`);
   }
