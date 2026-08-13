@@ -60,8 +60,8 @@ async function prewarmPending() {
     return !at || (at - now) <= 30_000;
   });
   for (const task of candidates) {
-    const selected = state.wallets.filter(w => w.encryptedKey).slice(0, task.wallets || 1);
-    const hasPrewarm = selected.every(w => prewarm.isReady(task.id, w.id));
+    const selected = prewarm.selectPrewarmWallets(task, state.wallets);
+    const hasPrewarm = selected.length && selected.every(w => prewarm.isReady(task.id, w.id));
     if (!hasPrewarm) {
       const log = (level, msg) => store.appendLog(state, level, msg);
       prewarm.prewarmTask(task, state.wallets, log).catch(() => {});

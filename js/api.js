@@ -125,6 +125,14 @@ const RV3_API = {
     });
   },
 
+  async preflightStatus() {
+    return this.request('/preflight');
+  },
+
+  async runPreflight() {
+    return this.request('/preflight', { method: 'POST', body: '{}' });
+  },
+
   async retryTask(id, task) {
     return this.request(`/tasks/${encodeURIComponent(id)}/retry`, {
       method: 'POST', body: JSON.stringify({ task }),

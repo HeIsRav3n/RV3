@@ -82,23 +82,53 @@ async function prewarmWallet(task, wallet, urls, log) {
   }
 }
 
+function selectPrewarmWallets(task, wallets) {
+  let selected = wallets.filter(w => w.encryptedKey);
+  if (Array.isArray(task.retryWalletIds) && task.retryWalletIds.length) {
+    const allow = new Set(task.retryWalletIds);
+    return selected.filter(w => allow.has(w.id));
+  }
+  return selected.slice(0, task.wallets || 1);
+}
+
+function taskWarmStatus(task, wallets) {
+  const selected = selectPrewarmWallets(task, wallets);
+  return selected.map(w => {
+    const e = cache.get(task.id)?.get(w.id);
+    const ready = isReady(task.id, w.id);
+    return {
+      walletId: w.id,
+      name: w.name,
+      ok: !!ready,
+      error: e?.error || null,
+      ageMs: e ? Date.now() - e.prewarmedAt : null,
+    };
+  });
+}
+
 async function prewarmTask(task, wallets, log = () => {}) {
-  if (!task.openseaSlug) return;
-  const selected = wallets.filter(w => w.encryptedKey).slice(0, task.wallets || 1);
-  if (!selected.length) return;
+  if (!task.openseaSlug) return { warmed: 0, wallets: [] };
+  const selected = selectPrewarmWallets(task, wallets);
+  if (!selected.length) return { warmed: 0, wallets: [] };
 
   const chainSlug = task.chainSlug || 'ethereum';
   const urls = tx.pickSendUrls(task.route, task.rpcUrls || [], chainSlug);
-  if (!urls.length) return;
+  if (!urls.length) {
+    log('err', `[prewarm] ${task.drop} — no RPC for ${chainSlug}`);
+    return { warmed: 0, wallets: taskWarmStatus(task, wallets) };
+  }
 
   if (task.rpcPrewarm !== false) {
     await rpc.prewarmUrls(urls);
   }
 
-  log('info', `[prewarm] ${task.drop} — ${selected.length} wallet(s) · route ${routes.displayRoute(task.route)}`);
+  log('info', `[prewarm] ${task.drop} — ${selected.length} wallet(s) · ${chainSlug} · route ${routes.displayRoute(task.route)}`);
   await Promise.allSettled(selected.map(w => prewarmWallet(task, w, urls, log)));
+  const status = taskWarmStatus(task, wallets);
+  return { warmed: status.filter(s => s.ok).length, wallets: status };
 }
 
 module.exports = {
   prewarmTask, prewarmWallet, getEntry, isReady, clearTask, clearEntry,
+  taskWarmStatus, selectPrewarmWallets,
 };

@@ -419,11 +419,80 @@ router.post('/tasks/:id/prewarm', async (req, res) => {
     if (!task.openseaSlug) return res.status(400).json({ error: 'No OpenSea slug on task' });
     const wallets = await walletStore.loadWallets().catch(() => state().wallets);
     const log = (level, msg) => store.appendLog(state(), level, msg);
-    await prewarm.prewarmTask(task, wallets, log);
-    const warmed = wallets
-      .filter(w => w.encryptedKey).slice(0, task.wallets || 1)
-      .filter(w => prewarm.isReady(task.id, w.id)).length;
-    res.json({ ok: true, warmed });
+    const result = await prewarm.prewarmTask(task, wallets, log);
+    const warmed = result?.warmed ?? 0;
+    task.warmed = warmed;
+    task.prewarmedAt = new Date().toISOString();
+    await taskStore.updateTaskStatus(task.id, task.status, { warmed, prewarmedAt: task.prewarmedAt });
+    worker.save();
+    res.json({ ok: true, warmed, wallets: result?.wallets || [] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+function preflightTaskRow(task, wallets) {
+  const chain = rpc.normalizeChain(task.chainSlug || 'ethereum');
+  const urls = rpc.allRpcUrls(task.rpcUrls || [], chain);
+  const warm = prewarm.taskWarmStatus(task, wallets);
+  const need = warm.length || task.wallets || 1;
+  const keyed = wallets.filter(w => w.encryptedKey).length;
+  return {
+    id: task.id,
+    name: task.name || task.drop,
+    drop: task.drop,
+    status: task.status,
+    chainSlug: chain,
+    route: task.route,
+    wallets: need,
+    slug: !!task.openseaSlug,
+    rpcOk: urls.length > 0,
+    rpcCount: urls.length,
+    keysOk: keyed >= need,
+    warmed: warm.filter(w => w.ok).length,
+    warm,
+    ready: urls.length > 0 && !!task.openseaSlug && keyed >= need && warm.length > 0 && warm.every(w => w.ok),
+  };
+}
+
+router.get('/preflight', async (req, res) => {
+  try {
+    const wallets = await walletStore.loadWallets().catch(() => state().wallets);
+    const queued = state().tasks.filter(t => t.status === 'queued');
+    const chains = [...new Set(queued.map(t => rpc.normalizeChain(t.chainSlug || 'ethereum')))];
+    if (!chains.length) chains.push('ethereum');
+    res.json({
+      liveMint: !!config.enableLiveMint,
+      tasks: queued.map(t => preflightTaskRow(t, wallets)),
+      chains: chains.map(chain => ({
+        chain,
+        rpc: rpc.allRpcUrls([], chain).length,
+      })),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/preflight', taskLimiter, async (req, res) => {
+  try {
+    const wallets = await walletStore.loadWallets().catch(() => state().wallets);
+    const queued = state().tasks.filter(t => t.status === 'queued');
+    const log = (level, msg) => store.appendLog(state(), level, msg);
+    const results = [];
+    for (const task of queued) {
+      if (!task.openseaSlug) {
+        results.push({ id: task.id, error: 'No OpenSea slug', warmed: 0, wallets: [] });
+        continue;
+      }
+      const result = await prewarm.prewarmTask(task, wallets, log);
+      task.warmed = result.warmed;
+      task.prewarmedAt = new Date().toISOString();
+      await taskStore.updateTaskStatus(task.id, task.status, { warmed: task.warmed, prewarmedAt: task.prewarmedAt }).catch(() => {});
+      results.push({ id: task.id, ...result, row: preflightTaskRow(task, wallets) });
+    }
+    worker.save();
+    res.json({ results, tasks: queued.map(t => preflightTaskRow(t, wallets)) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

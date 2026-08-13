@@ -565,6 +565,11 @@ code{background:var(--bg4);padding:1px 5px;border-radius:4px;font-size:11px;font
       <span class="ni-label">War room</span>
       <span class="ni-b nb-a" id="nb-warroom" style="display:none">0</span>
     </div>
+    <div class="ni" id="nav-preflight" onclick="go('preflight')" role="button" title="Preflight">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      <span class="ni-label">Preflight</span>
+      <span class="ni-b nb-g" id="nb-preflight" style="display:none">0</span>
+    </div>
     <div class="ni" id="nav-copymint" onclick="go('copymint')" role="button" title="Copy Mint">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
       <span class="ni-label">Copy Mint</span>
@@ -1063,6 +1068,8 @@ function loadState() {
       time: clip(t.time, 40), scheduledFor: t.scheduledFor ? clip(t.scheduledFor, 40) : null,
       wallets: sanitizeInt(t.wallets, 0, 200), rpcCount: sanitizeInt(t.rpcCount, 0, 50),
       chainSlug: t.chainSlug ? clip(t.chainSlug, 20) : 'ethereum',
+      warmed: t.warmed != null ? sanitizeInt(t.warmed, 0, 200) : 0,
+      prewarmedAt: t.prewarmedAt ? clip(t.prewarmedAt, 40) : null,
       error: t.error ? clip(t.error, 400) : null,
       txHashes: Array.isArray(t.txHashes) ? t.txHashes.filter(h => typeof h === 'string').slice(0, 50).map(h => clip(h, 66)) : [],
       avgBroadcastMs: t.avgBroadcastMs != null ? sanitizeInt(t.avgBroadcastMs, 0, 1e8) : null,
@@ -1081,10 +1088,12 @@ function loadState() {
 }
 
 // ROUTER
-const PAGES = new Set(['overview','drops','wallets','tasks','warroom','copymint','deleg','history','pnl','settings','fund','sweep','guide']);
+const PAGES = new Set(['overview','drops','wallets','tasks','warroom','preflight','copymint','deleg','history','pnl','settings','fund','sweep','guide']);
+let PF = { tasks: [], chains: [], liveMint: false, running: false, loaded: false };
 function go(page) {
   if(page === 'detector') page = 'drops';
   if(!PAGES.has(page)) return;
+  if (page !== 'preflight') PF.loaded = false;
   document.querySelectorAll('.ni').forEach(n => { n.classList.remove('act'); n.removeAttribute('aria-current'); });
   const el = document.getElementById('nav-'+page);
   if(el) { el.classList.add('act'); el.setAttribute('aria-current','page'); }
@@ -1092,6 +1101,7 @@ function go(page) {
     overview: renderOverview,
     wallets: renderWallets, drops: renderDrops, tasks: renderTasks,
     warroom: renderWarRoom,
+    preflight: renderPreflight,
     copymint: renderCopyMint,
     deleg: renderDeleg, history: renderHistory, pnl: renderPnl,
     settings: renderSettings, fund: renderFund, sweep: renderSweep,
@@ -1099,7 +1109,7 @@ function go(page) {
   };
   const titles = {
     overview:'Command', wallets:'Wallets',
-    drops:'Drops', tasks:'Tasks', warroom:'War room', copymint:'Copy Mint', deleg:'Delegation', history:'Run History',
+    drops:'Drops', tasks:'Tasks', warroom:'War room', preflight:'Preflight', copymint:'Copy Mint', deleg:'Delegation', history:'Run History',
     pnl:'PnL', settings:'Settings', fund:'Fund Wallets', sweep:'NFT Sweep',
     guide:'User Guide'
   };
@@ -1128,6 +1138,12 @@ function updateBadges() {
   const wr = S.tasks.filter(t => t.status === 'queued' || t.status === 'running' || t.status === 'broadcast').length;
   const wrBadge = document.getElementById('nb-warroom');
   if (wrBadge) { wrBadge.textContent = wr; wrBadge.style.display = wr ? 'block' : 'none'; }
+  const pfBadge = document.getElementById('nb-preflight');
+  if (pfBadge) {
+    const cold = S.tasks.filter(t => t.status === 'queued' && !t.warmed).length;
+    pfBadge.textContent = cold;
+    pfBadge.style.display = cold ? 'block' : 'none';
+  }
   document.getElementById('sys-rpc-lbl').textContent = `RPC: ${S.rpcs.length} endpoint${S.rpcs.length !== 1 ? 's' : ''}`;
 }
 
@@ -1258,7 +1274,7 @@ function renderOverview() {
   const pipe = [
     { n: '01', t: 'Detect', s: detectOk ? `${S.drops.length} drop${S.drops.length === 1 ? '' : 's'}` : 'No drops', cls: detectOk ? 'ok' : 'warn', go: 'drops' },
     { n: '02', t: 'Wallets ready', s: wrFocus.ready ? `${wrFocus.ready} ready · ${fmtChain(focusChain)}` : (S.wallets.length ? `${wrFocus.low + wrFocus.unfunded} need funds · ${fmtChain(focusChain)}` : 'None added'), cls: readyOk ? 'ok' : (S.wallets.length ? 'warn' : 'bad'), go: 'wallets' },
-    { n: '03', t: 'Preflight', s: !API_ONLINE ? 'Backend offline' : (missingRpc.length ? `No RPC · ${missingRpc.map(fmtChain).join(', ')}` : `${S.rpcs.length} RPC · ${chipChains.map(fmtChain).join(' · ')}`), cls: preflightOk ? 'ok' : 'warn', go: 'settings' },
+    { n: '03', t: 'Preflight', s: !API_ONLINE ? 'Backend offline' : (missingRpc.length ? `No RPC · ${missingRpc.map(fmtChain).join(', ')}` : (queued.length ? `${queued.filter(t=>t.warmed).length}/${queued.length} warm` : `${S.rpcs.length} RPC · ${chipChains.map(fmtChain).join(' · ')}`)), cls: preflightOk ? (queued.length && queued.every(t=>t.warmed) ? 'ok' : (queued.length ? 'warn' : 'ok')) : 'warn', go: 'preflight' },
     { n: '04', t: 'Fire', s: fireActive ? `${running.length} executing` : (fireArmed ? `${queued.length} armed` : 'Idle'), cls: fireActive ? 'ok' : (fireArmed ? 'warn' : ''), go: fireActive || fireArmed ? 'warroom' : 'tasks' },
     { n: '05', t: 'Track', s: running.length || queued.length ? 'War room live' : `${S.history.length} run${S.history.length === 1 ? '' : 's'}`, cls: (running.length || queued.length) ? 'ok' : '', go: 'warroom' },
   ];
@@ -1282,6 +1298,11 @@ function renderOverview() {
     ...S.history.slice(0, 6).map(r => ({ kind: 'hist', r, when: r.time })),
   ].slice(0, 8);
 
+  const settled = S.history.filter(r => ['completed','confirmed','broadcast','failed','reverted'].includes(r.status));
+  const wins = settled.filter(r => ['completed','confirmed','broadcast'].includes(r.status)).length;
+  const successPct = settled.length ? Math.round(wins / settled.length * 100) : null;
+
+  const logFeed = (S.logs || []).slice(0, 8);
   const mixQ = queued.length, mixR = running.length, mixC = confirmed, mixF = failedHist;
   const mixTot = mixQ + mixR + mixC + mixF || 1;
 
@@ -1298,7 +1319,10 @@ function renderOverview() {
     </div>`;
   }).join('')}</div>` : '';
 
-  document.getElementById('tba').innerHTML = `<button class="btn btn-sm" onclick="ovRefresh(true)" title="Refresh">⟳ Refresh</button>`;
+  document.getElementById('tba').innerHTML = `
+    <button class="btn btn-sm" onclick="ovRefresh(true)" title="Refresh">⟳ Refresh</button>
+    ${queued.length ? `<button class="btn btn-sm" onclick="runPreflightAll()" title="Pre-warm all armed tasks">⚡ Preflight</button>` : ''}
+    ${queued.length || running.length ? `<button class="btn btn-p btn-sm" onclick="go('warroom')">War room</button>` : ''}`;
 
   c.innerHTML = `
 ${chainRow}
@@ -1321,6 +1345,7 @@ ${!S.rpcs.length ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div cl
 <div class="cmd-grid">
 <div>
   <div class="section-lbl">Live activity</div>
+  ${logFeed.length ? `<div class="terminal" style="max-height:160px;margin-bottom:10px">${logFeed.map(wrLogLine).join('')}</div>` : ''}
   ${activity.length ? `<div class="card">${activity.map(a => {
     if (a.kind === 'task') {
       const t = a.t;
@@ -1367,7 +1392,11 @@ ${!S.rpcs.length ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div cl
     <div class="es-sub">Create a task to begin minting</div>
   </div></div>`}
   <div class="card" style="padding:14px 15px">
-    <div style="font-size:9.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;font-weight:700">Execution mix</div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+      <div style="font-size:9.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;font-weight:700">Execution mix</div>
+      <div style="font-size:18px;font-weight:800">${successPct != null ? successPct + '%' : '—'}</div>
+    </div>
+    <div style="font-size:10.5px;color:var(--text2);margin-top:-2px">${successPct != null ? 'Success rate · ' + wins + '/' + settled.length + ' settled' : 'No settled runs yet'}</div>
     <div class="mixbar">
       <i style="width:${(mixQ / mixTot * 100).toFixed(1)}%;background:var(--amber)"></i>
       <i style="width:${(mixR / mixTot * 100).toFixed(1)}%;background:var(--accent)"></i>
@@ -1385,7 +1414,7 @@ ${!S.rpcs.length ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div cl
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
     <button class="btn" onclick="go('drops')" style="padding:12px;flex-direction:column;height:auto;gap:5px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><circle cx="11" cy="11" r="3"/></svg><span style="font-size:11px;font-weight:600">Detect contract</span></button>
     <button class="btn btn-p" onclick="openModal()" style="padding:12px;flex-direction:column;height:auto;gap:5px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5,3 19,12 5,21"/></svg><span style="font-size:11px;font-weight:600">New mint task</span></button>
-    <button class="btn" onclick="go('fund')" style="padding:12px;flex-direction:column;height:auto;gap:5px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg><span style="font-size:11px;font-weight:600">Fund wallets</span></button>
+    <button class="btn" onclick="go('preflight')" style="padding:12px;flex-direction:column;height:auto;gap:5px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span style="font-size:11px;font-weight:600">Preflight</span></button>
     <button class="btn" onclick="go('warroom')" style="padding:12px;flex-direction:column;height:auto;gap:5px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg><span style="font-size:11px;font-weight:600">War room</span></button>
   </div>
 </div>
@@ -1965,6 +1994,7 @@ function renderTasks() {
     const hasSchedule = isQueued && t.scheduledFor;
     const sched = hasSchedule ? `<div id="cd-${esc(t.id)}" style="font-size:10px;color:var(--amber);margin-top:2px;font-family:var(--mono)">…</div>` : '';
     const priorityBadge = t.priority ? `<span style="font-size:9px;color:var(--amber);font-weight:700;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);border-radius:3px;padding:1px 5px;margin-right:4px">PRIORITY</span>` : '';
+    const warmBadge = t.warmed ? `<span style="font-size:9px;color:var(--green);font-weight:700;background:rgba(15,207,133,.12);border:1px solid rgba(15,207,133,.3);border-radius:3px;padding:1px 5px;margin-right:4px">WARM ${t.warmed}</span>` : '';
     const txLink = t.txHashes?.length ? `<div style="font-size:10px;margin-top:2px">${txLinkHTML(itemChain(t), t.txHashes[0], t.txHashes[0].slice(0,14)+'…')}${isConfirmed ? ` · block ${t.blockNumber}` : ''}</div>` : '';
     const errorLine = (t.status === 'failed' || isReverted) && t.error ? `<div style="font-size:10px;color:var(--red);margin-top:2px;font-family:var(--mono)" title="${esc(t.error)}">✗ ${esc(t.error.length > 90 ? t.error.slice(0,90)+'…' : t.error)}</div>` : '';
     const statusLabel = isBroadcast ? 'SENT' : isConfirmed ? 'CONFIRMED' : isReverted ? 'REVERTED' : isSkipped ? 'SKIPPED' : t.status.toUpperCase();
@@ -1972,7 +2002,7 @@ function renderTasks() {
   <div class="rr" id="tr-${esc(t.id)}">
     <div class="rd" style="background:${dotColor}"></div>
     <div class="ri">
-      <div class="rn">${priorityBadge}${esc(t.name || t.drop)}</div>
+      <div class="rn">${priorityBadge}${warmBadge}${esc(t.name || t.drop)}</div>
       <div class="rm">${chainChipHTML(itemChain(t))} ${esc(fmtRoute(t.route))} · ${t.wallets} wallet${t.wallets !== 1 ? 's' : ''} · qty ${t.qty}${t.time ? ' · ' + esc(t.time) : ''}</div>
       ${sched}${txLink}${errorLine}
     </div>
@@ -2117,6 +2147,7 @@ async function taskPrewarm(id) {
   const task = S.tasks.find(t => t.id === id);
   try {
     const { warmed } = await RV3_API.prewarmTask(id, task);
+    if (task) { task.warmed = warmed; task.prewarmedAt = new Date().toISOString(); saveState(); updateBadges(); }
     if (btn) { btn.textContent = `✓ Ready (${warmed})`; btn.style.color = 'var(--green)'; btn.style.borderColor = 'rgba(15,207,133,.3)'; btn.style.background = 'rgba(15,207,133,.1)'; }
     toast(`Pre-warm complete — ${warmed} wallet(s) ready`, '✓');
   } catch (e) {
@@ -2138,6 +2169,7 @@ function renderWarRoom() {
   const rows = [...live, ...recent];
   document.getElementById('tba').innerHTML = `
     <button class="btn btn-sm" onclick="wrRefresh(true)">⟳ Refresh</button>
+    ${S.tasks.some(t=>t.status==='queued') ? `<button class="btn btn-sm" onclick="runPreflightAll()">⚡ Preflight</button>` : ''}
     <button class="btn btn-p btn-sm" onclick="openModal()">New task</button>`;
 
   const rowHTML = (t) => {
@@ -2195,6 +2227,112 @@ async function wrRefresh(manual) {
       try { await RV3_API.health(); } catch {}
     }
     if (document.getElementById('nav-warroom')?.classList.contains('act')) renderWarRoom();
+  } catch { /* */ }
+}
+
+// ── PREFLIGHT ──
+async function runPreflightAll() {
+  if (!API_ONLINE) { toast('Backend required','⚠'); return; }
+  if (PF.running) return;
+  PF.running = true;
+  toast('Preflight — simulating + pre-signing armed tasks','⚡');
+  try {
+    const data = await RV3_API.runPreflight();
+    PF.tasks = data.tasks || [];
+    for (const r of data.results || []) {
+      const t = S.tasks.find(x => x.id === r.id);
+      if (t) { t.warmed = r.warmed || 0; t.prewarmedAt = new Date().toISOString(); }
+    }
+    saveState(); updateBadges();
+    const n = (data.results || []).reduce((a, r) => a + (r.warmed || 0), 0);
+    toast(`Preflight done — ${n} wallet(s) warm`, '✓');
+    const onPf = document.getElementById('nav-preflight')?.classList.contains('act');
+    const onOv = document.getElementById('nav-overview')?.classList.contains('act');
+    const onWar = document.getElementById('nav-warroom')?.classList.contains('act');
+    if (onPf) renderPreflight();
+    else if (onWar) renderWarRoom();
+    else if (onOv) renderOverview();
+    else go('preflight');
+  } catch (e) {
+    toast(e.message || 'Preflight failed','⚠');
+  } finally { PF.running = false; }
+}
+
+function renderPreflight() {
+  const c = document.getElementById('content');
+  const queued = S.tasks.filter(t => t.status === 'queued');
+  document.getElementById('tba').innerHTML = `
+    <button class="btn btn-sm" onclick="pfRefresh(true)">⟳ Refresh</button>
+    ${queued.length ? `<button class="btn btn-p btn-sm" onclick="runPreflightAll()" ${PF.running?'disabled':''}>⚡ Preflight all</button>` : ''}
+    <button class="btn btn-sm" onclick="openModal()">New task</button>`;
+
+  const rows = queued.length
+    ? (PF.tasks.length ? PF.tasks : queued.map(t => ({
+        id: t.id, name: t.name || t.drop, chainSlug: itemChain(t), route: t.route,
+        wallets: t.wallets || 1, slug: !!t.openseaSlug, rpcOk: chainHasRpc(itemChain(t)),
+        warmed: t.warmed || 0, keysOk: true, ready: !!t.warmed, warm: [],
+      })))
+    : [];
+
+  const gate = (ok, yes, no) => `<span class="st ${ok ? 'st-ok' : 'st-fail'}">${ok ? yes : no}</span>`;
+
+  c.innerHTML = `
+<div class="stats-row" style="grid-template-columns:repeat(3,1fr)">
+  <div class="sc s-a"><div class="sc-lbl">Armed</div><div class="sc-val">${queued.length}</div><div class="sc-sub">Queued to fire</div></div>
+  <div class="sc s-g"><div class="sc-lbl">Warm</div><div class="sc-val">${queued.filter(t=>t.warmed).length}</div><div class="sc-sub">Calldata + sim cached</div></div>
+  <div class="sc s-${PF.liveMint ? 'g' : 'o'}"><div class="sc-lbl">Live mint</div><div class="sc-val" style="font-size:16px">${PF.liveMint ? 'ON' : 'SIM'}</div><div class="sc-sub">${PF.liveMint ? 'Broadcast enabled' : 'ENABLE_LIVE_MINT off'}</div></div>
+</div>
+${!API_ONLINE ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt">Backend offline — start <code>npm start</code> to simulate and pre-sign.</div></div>` : ''}
+${queued.length ? '' : `<div class="card"><div class="es"><div class="es-title">Nothing armed</div><div class="es-sub">Create a mint task, then preflight before you fire</div><button class="btn btn-p" onclick="openModal()" style="margin-top:12px">New mint task</button></div></div>`}
+${rows.length ? `
+<div class="section-lbl">Gates</div>
+<div class="card" style="overflow-x:auto">
+  <table class="wr-table">
+    <thead><tr><th>Task</th><th>Chain</th><th>Slug</th><th>RPC</th><th>Warm</th><th></th></tr></thead>
+    <tbody>${rows.map(t => {
+      const warmN = t.warmed || (t.warm || []).filter(w => w.ok).length;
+      const need = t.wallets || (t.warm || []).length || 1;
+      const warmOk = warmN >= need && need > 0;
+      const failW = (t.warm || []).filter(w => !w.ok);
+      return `<tr>
+        <td><div style="font-weight:700">${esc(t.name || t.drop)}</div><div style="font-size:10px;color:var(--text3)">${esc(fmtRoute(t.route))} · ${need} wallet${need!==1?'s':''}</div>
+          ${failW.length ? failW.map(w => `<div class="wr-wrow" style="color:var(--red)">✗ ${esc(w.name || w.walletId)} · ${esc(w.error || 'not warm')}</div>`).join('') : ''}
+        </td>
+        <td>${chainChipHTML(t.chainSlug)}</td>
+        <td>${gate(t.slug, 'OK', 'MISSING')}</td>
+        <td>${gate(t.rpcOk, (t.rpcCount || 1) + ' OK', 'NONE')}</td>
+        <td>${gate(warmOk, warmN + '/' + need, (warmN || 0) + '/' + need)}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-xs" onclick="taskPrewarm('${esc(t.id)}')">⚡ Warm</button>
+          ${t.ready || warmOk ? `<button class="btn btn-p btn-xs" onclick="taskRunNow('${esc(t.id)}')">▶ Fire</button>` : ''}
+        </td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>
+</div>` : ''}
+<div class="ban ban-i"><div class="ban-ico">ℹ</div><div class="ban-txt">Preflight fetches calldata, simulates each wallet, and pre-signs with extra fee headroom so Fire is a single broadcast. Flashbots routes stay Ethereum-only.</div></div>`;
+
+  if (API_ONLINE && !PF.loaded && !PF.running) {
+    PF.loaded = true;
+    pfRefresh(true);
+  }
+}
+
+async function pfRefresh(manual) {
+  if (!document.getElementById('nav-preflight')?.classList.contains('act') && !manual) return;
+  try {
+    if (API_ONLINE) {
+      const data = await RV3_API.preflightStatus();
+      PF.tasks = data.tasks || [];
+      PF.chains = data.chains || [];
+      PF.liveMint = !!data.liveMint;
+      for (const row of PF.tasks) {
+        const t = S.tasks.find(x => x.id === row.id);
+        if (t) t.warmed = row.warmed;
+      }
+      saveState(); updateBadges();
+    }
+    if (document.getElementById('nav-preflight')?.classList.contains('act')) renderPreflight();
   } catch { /* */ }
 }
 
@@ -3879,7 +4017,15 @@ function sweepExecute() {
 const NOTIFS = [];
 const CHANGELOG = [
   {
-    ver:'v2.5.0', date:'Aug 13 2026', isNew:true,
+    ver:'v2.6.0', date:'Aug 13 2026', isNew:true,
+    items:[
+      {tag:'new', text:'Preflight page — gate every armed task (slug, chain RPC, simulation, pre-sign) before Fire, with one-click Preflight all'},
+      {tag:'new', text:'Command success rate, live execution log, and pipeline Preflight step that jumps to the gate check'},
+      {tag:'fix', text:'Pre-warm respects retry wallets and reports per-wallet warm/fail so a partial retry is actually ready'},
+    ]
+  },
+  {
+    ver:'v2.5.0', date:'Aug 13 2026', isNew:false,
     items:[
       {tag:'new', text:'Command overview — pipeline, live activity, execution mix, and War room jump-in modeled on MintDash'},
       {tag:'new', text:'Wallet readiness states (Ready / Low / Unfunded / Watch-only) with filter tabs on the Wallets page'},
@@ -4162,8 +4308,8 @@ function renderGuide() {
 </ul>
 <h4>Mint speed</h4>
 <p>Confirmation time in milliseconds is tracked per transaction and averaged across wallets in each run. Visible on Command, War room, Tasks, and History. Tx links open the explorer for that drop’s chain (Etherscan, Basescan, Blastscan, Polygonscan, or Robinhood Blockscout).</p>
-<h4>Command → War room</h4>
-<p>Arm a task from Detect or Drops. Command shows fleet readiness per chain. Fire jumps to War room for live per-wallet results. Failed rows Retry (failed wallets only) or Skip.</p>`
+<h4>Command → Preflight → War room</h4>
+<p>Arm a task from Detect or Drops. Command shows fleet readiness and success rate per chain. Open <strong>Preflight</strong> to simulate and pre-sign every armed wallet, then Fire jumps to War room for live per-wallet results. Failed rows Retry (failed wallets only) or Skip.</p>`
     },
     {
       icon: '⬡',
