@@ -468,11 +468,13 @@ router.post('/tasks/:id/run', async (req, res) => {
       task.txHashes = result.txHashes;
       task.avgBroadcastMs = result.avgBroadcastMs;
       task.avgAttemptMs = result.avgAttemptMs;
+      task.walletResults = result.walletResults || [];
       task.error = result.errors.length ? result.errors[0] : null;
       task.finishedAt = new Date().toISOString();
       await taskStore.updateTaskStatus(task.id, task.status, {
         minted: task.minted, txHashes: task.txHashes,
         avgBroadcastMs: task.avgBroadcastMs, avgAttemptMs: task.avgAttemptMs,
+        walletResults: task.walletResults,
         error: task.error, finishedAt: task.finishedAt,
       });
       const note = result.txHashes.length
@@ -501,6 +503,71 @@ router.post('/tasks/:id/run', async (req, res) => {
     }
   } catch (e) {
     if (!res.headersSent) res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/tasks/:id/retry', taskLimiter, async (req, res) => {
+  try {
+    const src = await resolveTask(req.params.id, req.body?.task);
+    if (!src) return res.status(404).json({ error: 'Task not found' });
+    if (!['failed', 'reverted'].includes(src.status)) {
+      return res.status(400).json({ error: `Cannot retry a ${src.status} task` });
+    }
+    const failedIds = (src.walletResults || []).filter(r => !r.ok && r.walletId).map(r => r.walletId);
+    const clone = {};
+    for (const [k, v] of Object.entries(src)) {
+      if (k.startsWith('pw_')) continue;
+      clone[k] = v;
+    }
+    clone.id = `task_${Date.now()}`;
+    clone.status = 'queued';
+    clone.priority = true;
+    clone.error = null;
+    clone.note = null;
+    clone.txHashes = [];
+    clone.walletResults = [];
+    clone.minted = 0;
+    clone.finishedAt = null;
+    clone.startedAt = null;
+    clone.blockNumber = null;
+    clone.gasUsed = null;
+    clone.avgBroadcastMs = null;
+    clone.avgAttemptMs = null;
+    clone.retriedFrom = src.id;
+    clone.time = new Date().toLocaleString();
+    clone.createdAt = new Date().toISOString();
+    if (failedIds.length) {
+      clone.retryWalletIds = failedIds;
+      clone.wallets = failedIds.length;
+    } else {
+      delete clone.retryWalletIds;
+    }
+    const s = state();
+    s.tasks.unshift(clone);
+    store.appendLog(s, 'info', `Retry queued: ${clone.name || clone.drop} (from ${src.id})`);
+    worker.save();
+    taskStore.saveTask(clone).catch(() => {});
+    res.json({ task: clone });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/tasks/:id/skip', async (req, res) => {
+  try {
+    const task = await resolveTask(req.params.id, req.body?.task);
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (!['queued', 'failed', 'reverted'].includes(task.status)) {
+      return res.status(400).json({ error: `Cannot skip a ${task.status} task` });
+    }
+    task.status = 'skipped';
+    task.finishedAt = new Date().toISOString();
+    await taskStore.saveTask(task);
+    worker.save();
+    store.appendLog(state(), 'info', `Task skipped: ${task.name || task.drop}`);
+    res.json({ ok: true, status: 'skipped' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 

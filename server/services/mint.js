@@ -148,9 +148,12 @@ async function runBundleMintTask(task, selected, log) {
     selected.map(w => signMintForWallet(w, task, fastest, log)));
   const signedTxs = [];
   const errors = [];
+  const signedIndexByWallet = new Map();
   signResults.forEach((r, i) => {
-    if (r.status === 'fulfilled') signedTxs.push(r.value);
-    else {
+    if (r.status === 'fulfilled') {
+      signedIndexByWallet.set(selected[i].id, signedTxs.length);
+      signedTxs.push(r.value);
+    } else {
       const msg = `${selected[i].name}: ${r.reason?.message || r.reason}`;
       errors.push(msg);
       log('err', msg);
@@ -186,6 +189,24 @@ async function runBundleMintTask(task, selected, log) {
     for (const w of selected) prewarm.clearEntry(task.id, w.id);
   }
 
+  const walletResults = selected.map((w, i) => {
+    const sr = signResults[i];
+    if (sr.status !== 'fulfilled') {
+      return {
+        walletId: w.id, name: w.name, ok: false, hash: null, ms: submitMs,
+        error: sr.reason?.message || String(sr.reason),
+      };
+    }
+    const idx = signedIndexByWallet.get(w.id);
+    const hash = idx != null ? (bundle.hashes[idx] || null) : null;
+    const rec = idx != null ? receipts[idx] : null;
+    const ok = !!(landed.length && rec && rec.status === 1);
+    return {
+      walletId: w.id, name: w.name, ok, hash, ms: submitMs,
+      error: landed.length ? (ok ? null : 'reverted') : 'bundle not included',
+    };
+  });
+
   return {
     minted: landed.length * (task.qty || 1),
     txHashes: landed.length ? bundle.hashes : [],
@@ -195,11 +216,22 @@ async function runBundleMintTask(task, selected, log) {
     avgAttemptMs: submitMs,
     bundled: true,
     targetBlocks: bundle.targetBlocks,
+    walletResults,
   };
 }
 
+function selectMintWallets(task, wallets) {
+  let selected = wallets.filter(w => w.encryptedKey);
+  if (Array.isArray(task.retryWalletIds) && task.retryWalletIds.length) {
+    const allow = new Set(task.retryWalletIds);
+    selected = selected.filter(w => allow.has(w.id));
+    return selected;
+  }
+  return selected.slice(0, task.wallets || 1);
+}
+
 async function runMintTask(task, wallets, log) {
-  const selected = wallets.filter(w => w.encryptedKey).slice(0, task.wallets || 1);
+  const selected = selectMintWallets(task, wallets);
   if (!selected.length) throw new Error('No wallets with server keys imported');
 
   const chainSlug = task.chainSlug || 'ethereum';
@@ -252,10 +284,25 @@ async function runMintTask(task, wallets, log) {
     }
   }
 
+  const walletResults = results.map((res, i) => {
+    const w = selected[i];
+    if (res.status === 'fulfilled') {
+      return {
+        walletId: w.id, name: w.name, ok: true,
+        hash: res.value.hash, ms: res.value.broadcastMs || 0, error: null,
+      };
+    }
+    return {
+      walletId: w.id, name: w.name, ok: false, hash: null,
+      ms: res.reason?.attemptMs || 0,
+      error: res.reason?.message || String(res.reason),
+    };
+  });
+
   const count = selected.length;
   const avgBroadcastMs = txHashes.length ? Math.round(totalBroadcastMs / txHashes.length) : null;
   const avgAttemptMs = count ? Math.round(totalAttemptMs / count) : null;
-  return { minted, txHashes, totalGas, errors, avgBroadcastMs, avgAttemptMs };
+  return { minted, txHashes, totalGas, errors, avgBroadcastMs, avgAttemptMs, walletResults };
 }
 
 module.exports = { runMintTask, executeMintForWallet, runBundleMintTask, signMintForWallet };

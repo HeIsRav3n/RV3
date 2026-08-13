@@ -125,6 +125,18 @@ const RV3_API = {
     });
   },
 
+  async retryTask(id, task) {
+    return this.request(`/tasks/${encodeURIComponent(id)}/retry`, {
+      method: 'POST', body: JSON.stringify({ task }),
+    });
+  },
+
+  async skipTask(id, task) {
+    return this.request(`/tasks/${encodeURIComponent(id)}/skip`, {
+      method: 'POST', body: JSON.stringify({ task }),
+    });
+  },
+
   async prioritizeTask(id) {
     return this.request(`/tasks/${encodeURIComponent(id)}/priority`, { method: 'POST', body: '{}' });
   },
