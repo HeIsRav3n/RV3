@@ -21,6 +21,8 @@ app.use((req, res, next) => {
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  const isHtml = req.path === '/' || req.path.endsWith('.html') || !path.extname(req.path);
+  if (isHtml) res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   next();
 });
 
@@ -28,7 +30,7 @@ app.use(cors({ origin: false }));
 app.use(express.json({ limit: '100kb' }));
 
 app.get('/health', (req, res) => {
-  res.json({ ok: true, time: new Date().toISOString() });
+  res.json({ ok: true, version: require('../package.json').version, time: new Date().toISOString() });
 });
 
 app.use('/auth', authRoutes);
