@@ -158,7 +158,7 @@ tail -f /opt/RV3/health.log
 ```bash
 curl -X POST https://your-domain.com/auth/verify \
   -H "Content-Type: application/json" \
-  -H "X-Auth-Token: YOUR_TEST_TOKEN" \
+  -b "rv3_session=YOUR_SESSION_COOKIE" \
   -d '{}'
 ```
 

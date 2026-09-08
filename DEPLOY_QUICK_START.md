@@ -19,7 +19,6 @@ Railway is the easiest way to deploy RV3 because it fully supports Node.js serve
 **Environment Variables Required:**
 ```
 API_SECRET = [generate random string]
-WALLET_ENCRYPTION_KEY = [64-char hex key]
 OPENSEA_API_KEY = [from opensea.io]
 ETH_RPC_PRIMARY = [from alchemy.com free tier]
 NODE_ENV = production
@@ -30,8 +29,6 @@ NODE_ENV = production
 # API_SECRET
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
-# WALLET_ENCRYPTION_KEY
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
 → See **DEPLOY_RAILWAY.md** for full guide
@@ -67,7 +64,6 @@ Before deploying to any platform:
 
 - [ ] Git repo is up to date: `git push origin main`
 - [ ] `.env` has all required variables (see above)
-- [ ] `WALLET_ENCRYPTION_KEY` is 64-char hex
 - [ ] `API_SECRET` is long random string (32+ chars)
 - [ ] OpenSea API key obtained (free from opensea.io)
 - [ ] RPC endpoint configured (free tier from alchemy.com)
@@ -100,7 +96,6 @@ Before deploying to any platform:
 ### Required
 ```
 API_SECRET               Long random string (32+ chars)
-WALLET_ENCRYPTION_KEY   64-char hex (from: node -e "...")
 OPENSEA_API_KEY         From https://docs.opensea.io
 ETH_RPC_PRIMARY         From https://www.alchemy.com
 ```
@@ -127,7 +122,7 @@ TASK_RATE_LIMIT_PER_MIN Set to '10' (default)
 
 **Server won't start:**
 - Check `API_SECRET` is set
-- Check `WALLET_ENCRYPTION_KEY` is 64-char hex
+- Confirm an external signer is configured before considering live execution
 - Check Node.js logs for errors
 
 **Can't create account:**

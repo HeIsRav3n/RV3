@@ -50,7 +50,7 @@ nano .env  # Edit with your production values
 
 **Required secrets to update:**
 - `API_SECRET` — long random string for auth/API
-- `WALLET_ENCRYPTION_KEY` — 64-char hex (generate: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`)
+- An approved external signer configuration — RV3 stores public addresses only
 - `OPENSEA_API_KEY` — from https://docs.opensea.io
 - `ETH_RPC_PRIMARY` — your primary Ethereum RPC
 
@@ -131,7 +131,6 @@ heroku create your-rv3-app
 
 # Set environment variables
 heroku config:set API_SECRET=your-secret
-heroku config:set WALLET_ENCRYPTION_KEY=your-key
 heroku config:set OPENSEA_API_KEY=your-key
 heroku config:set ETH_RPC_PRIMARY=https://your-rpc
 
@@ -168,7 +167,7 @@ docker run -d -p 3000:3000 --env-file .env rv3-mint-bot
 ## Production Security Checklist
 
 - [ ] Generate new `API_SECRET` (64+ chars, random)
-- [ ] Generate new `WALLET_ENCRYPTION_KEY` (64-char hex)
+- [ ] Configure and test the approved external signer
 - [ ] Set up HTTPS/SSL certificate
 - [ ] Configure firewall to block all ports except 80, 443, 22 (SSH)
 - [ ] Use strong SSH keys (disable password auth)
@@ -237,7 +236,7 @@ pm2 start server/index.js --watch --no-daemon
 
 ### Users can't log in
 - Check `data/users.json` exists
-- Check `WALLET_ENCRYPTION_KEY` is set correctly
+- Check the external-signer configuration and session status
 - Check server logs: `pm2 logs rv3`
 
 ### Memory issues

@@ -7,11 +7,12 @@ const config = require('./config');
 const authRoutes = require('./routes/auth');
 const apiRoutes = require('./routes/api');
 const worker = require('./services/worker');
-const { authRequired } = require('./routes/auth');
+const { authRequired, adminRequired } = require('./routes/auth');
 const auth = require('./middleware/auth');
 
 const app = express();
 const root = path.join(__dirname, '..');
+app.disable('x-powered-by');
 
 // Security headers
 app.use((req, res, next) => {
@@ -20,7 +21,10 @@ app.use((req, res, next) => {
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  // The legacy UI includes inline styles/scripts, so a nonce-based policy is a
+  // follow-up refactor. This still prevents plugins and unexpected origins.
+  res.setHeader('Content-Security-Policy', "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; connect-src 'self' https:; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'");
+  if (config.env === 'production') res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   const isHtml = req.path === '/' || req.path.endsWith('.html') || !path.extname(req.path);
   if (isHtml) res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   next();
@@ -34,10 +38,16 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/auth', authRoutes);
-app.use('/api', authRequired, auth, apiRoutes);
+// RV3 is a single-operator system. Every operational API is administrator-only.
+app.use('/api', authRequired, auth, adminRequired, apiRoutes);
 
 app.use(express.static(root, { index: 'index.html' }));
 app.use((req, res) => { res.sendFile(path.join(root, 'index.html')); });
+app.use((err, req, res, next) => {
+  console.error('RV3 request failed:', err?.message || 'unknown error');
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: 'Internal server error' });
+});
 
 worker.start();
 

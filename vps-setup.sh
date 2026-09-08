@@ -71,7 +71,6 @@ NODE_ENV=production
 API_SECRET=CHANGE_ME_GENERATE_RANDOM
 
 # Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-WALLET_ENCRYPTION_KEY=CHANGE_ME_GENERATE_HEX
 
 # ── OpenSea (required for contract detection) ───
 # Get from: https://docs.opensea.io
@@ -226,7 +225,7 @@ echo "   nano /opt/RV3/.env"
 echo ""
 echo "2. Add your API keys:"
 echo "   - API_SECRET (generate random)"
-echo "   - WALLET_ENCRYPTION_KEY (64-char hex)"
+echo "   - approved external signer configuration"
 echo "   - OPENSEA_API_KEY (from opensea.io)"
 echo "   - ETH_RPC_PRIMARY (from alchemy.com)"
 echo ""

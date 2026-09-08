@@ -122,7 +122,6 @@ Paste this and edit:
 PORT=3000
 NODE_ENV=production
 API_SECRET=your_random_secret_here
-WALLET_ENCRYPTION_KEY=your_64_char_hex_here
 OPENSEA_API_KEY=your_opensea_key
 ETH_RPC_PRIMARY=your_rpc_url
 ENABLE_LIVE_MINT=false

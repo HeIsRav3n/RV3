@@ -37,9 +37,6 @@ PORT=8080
 # Auth
 API_SECRET=generate_a_long_random_string_here
 
-# Wallet encryption (64-char hex)
-WALLET_ENCRYPTION_KEY=generate_with_node_command_below
-
 # OpenSea (get from https://docs.opensea.io)
 OPENSEA_API_KEY=your_opensea_api_key
 
@@ -62,8 +59,6 @@ TASK_RATE_LIMIT_PER_MIN=10
 # Generate API_SECRET (copy entire output)
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
-# Generate WALLET_ENCRYPTION_KEY (copy entire output)
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
 ### Step 4: Deploy
@@ -135,7 +130,7 @@ In Railway dashboard:
 
 **Required for login to work:**
 - `API_SECRET` — for authentication
-- `WALLET_ENCRYPTION_KEY` — for wallet security
+- An approved external signer — for transaction-specific wallet approval
 
 **Required for features to work:**
 - `OPENSEA_API_KEY` — contract detection
@@ -162,7 +157,7 @@ In Railway dashboard:
 3. Verify `API_SECRET` is set
 
 ### Users can't create accounts
-1. Check `API_SECRET` and `WALLET_ENCRYPTION_KEY` are set
+1. Check `API_SECRET` and the external-signer configuration are set
 2. Look at logs for errors: `data/users.json` might have permission issue
 3. Restart deployment: Settings → Redeploy
 

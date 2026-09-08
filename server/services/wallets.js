@@ -3,17 +3,10 @@
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
+const dbConnection = require('../db');
 
-const USE_DB = !!(process.env.DATABASE_URL || '').trim();
-
-let neon;
-if (USE_DB) {
-  try { neon = require('@neondatabase/serverless').neon; } catch {}
-}
-
-function sql() {
-  return neon(process.env.DATABASE_URL);
-}
+const USE_DB = dbConnection.useDatabase();
+const sql = dbConnection.sql;
 
 const FILE = path.join(config.dataDir, 'wallets.json');
 
@@ -42,21 +35,28 @@ async function ensureTable() {
       address TEXT NOT NULL,
       addr TEXT NOT NULL,
       chain TEXT NOT NULL DEFAULT 'ETH',
-      encrypted_key TEXT,
+      signer_type TEXT NOT NULL DEFAULT 'external',
       eth DOUBLE PRECISION DEFAULT 0,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `;
+  // Existing custodial deployments created this table before signer_type was
+  // introduced. Keep the schema migration additive so watch-only wallet
+  // registration does not fail on those databases.
+  await db`ALTER TABLE rv3_wallets ADD COLUMN IF NOT EXISTS signer_type TEXT NOT NULL DEFAULT 'external'`;
 }
 
 async function loadWallets() {
-  if (USE_DB && neon) {
+  if (USE_DB) {
     try {
       await ensureTable();
-      const rows = await sql()`SELECT * FROM rv3_wallets ORDER BY created_at ASC`;
+      const rows = await sql()`
+        SELECT id, name, address, addr, chain, signer_type, eth, created_at
+        FROM rv3_wallets ORDER BY created_at ASC
+      `;
       return rows.map(r => ({
         id: r.id, name: r.name, address: r.address, addr: r.addr,
-        chain: r.chain || 'ETH', encryptedKey: r.encrypted_key || null,
+        chain: r.chain || 'ETH', signerType: r.signer_type || 'external',
         eth: parseFloat(r.eth) || 0, low: (parseFloat(r.eth) || 0) < 0.01,
         nonce: 0, createdAt: r.created_at,
       }));
@@ -69,16 +69,16 @@ async function loadWallets() {
 }
 
 async function saveWallet(entry) {
-  if (USE_DB && neon) {
+  if (USE_DB) {
     try {
       await ensureTable();
       await sql()`
-        INSERT INTO rv3_wallets (id, name, address, addr, chain, encrypted_key, eth)
-        VALUES (${entry.id}, ${entry.name}, ${entry.address}, ${entry.addr}, ${entry.chain || 'ETH'}, ${entry.encryptedKey || null}, ${entry.eth || 0})
+        INSERT INTO rv3_wallets (id, name, address, addr, chain, signer_type, eth)
+        VALUES (${entry.id}, ${entry.name}, ${entry.address}, ${entry.addr}, ${entry.chain || 'ETH'}, ${entry.signerType || 'external'}, ${entry.eth || 0})
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
           eth = EXCLUDED.eth,
-          encrypted_key = COALESCE(EXCLUDED.encrypted_key, rv3_wallets.encrypted_key)
+          signer_type = EXCLUDED.signer_type
       `;
     } catch (e) {
       console.error('wallets.saveWallet DB error:', e.message);
@@ -92,7 +92,7 @@ async function saveWallet(entry) {
 }
 
 async function deleteWallet(id) {
-  if (USE_DB && neon) {
+  if (USE_DB) {
     try {
       await ensureTable();
       await sql()`DELETE FROM rv3_wallets WHERE id = ${id}`;
@@ -106,7 +106,7 @@ async function deleteWallet(id) {
 }
 
 async function updateBalance(id, eth) {
-  if (USE_DB && neon) {
+  if (USE_DB) {
     try {
       await sql()`UPDATE rv3_wallets SET eth = ${eth} WHERE id = ${id}`;
     } catch { /* non-critical */ }

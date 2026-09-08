@@ -25,10 +25,16 @@ async function osFetch(path, opts = {}) {
     signal: AbortSignal.timeout(timeout),
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`OpenSea ${res.status}: ${text.slice(0, 200) || res.statusText}`);
+    const retryAfter = res.headers.get('retry-after');
+    if (res.status === 429) throw new Error(`OpenSea rate limit reached${retryAfter ? `; retry after ${retryAfter} seconds` : ''}`);
+    throw new Error(`OpenSea request failed (${res.status})`);
   }
-  return res.json();
+  const data = await res.json();
+  return { ...data, _rv3RateLimit: {
+    limit: res.headers.get('x-ratelimit-limit'),
+    remaining: res.headers.get('x-ratelimit-remaining'),
+    reset: res.headers.get('x-ratelimit-reset'),
+  } };
 }
 
 function chainSlug(chain) {
@@ -62,24 +68,23 @@ async function getCollectionStats(slug) {
   }
 }
 
+async function getSupportedChains() {
+  const data = await osFetch('/chains');
+  return data.chains || data || [];
+}
+
 async function getDrop(slug) {
   const cached = dropCache.get(slug);
   if (cached && Date.now() - cached.at < DROP_CACHE_MS) return cached.data;
 
-  // Race GQL vs REST — GQL batches collection+stages in one call vs two REST calls.
-  // Whichever responds first wins; other is silently ignored.
-  const [gqlResult, restResult] = await Promise.allSettled([
-    gql.getDropInfo(slug),
-    osFetch(`/drops/${encodeURIComponent(slug)}`),
-  ]);
-
+  // REST v2 is the supported OpenSea integration. GraphQL, when explicitly
+  // enabled for diagnostics, may only provide a read-only fallback.
   let data;
-  if (gqlResult.status === 'fulfilled' && gqlResult.value) {
-    data = gqlResult.value;
-  } else if (restResult.status === 'fulfilled') {
-    data = restResult.value;
-  } else {
-    throw restResult.reason || gqlResult.reason;
+  try { data = await osFetch(`/drops/${encodeURIComponent(slug)}`); }
+  catch (restError) {
+    if (!config.openseaGraphqlEnabled) throw restError;
+    data = await gql.getDropInfo(slug);
+    if (!data) throw restError;
   }
 
   dropCache.set(slug, { data, at: Date.now() });
@@ -92,22 +97,13 @@ async function getDrop(slug) {
  * Both paths are identical in output shape so callers are unaffected.
  */
 async function buildDropMintTransaction(slug, minter, quantity = 1, timeout = FAST_TIMEOUT) {
-  const [gqlResult, restResult] = await Promise.allSettled([
-    gql.buildMintTransaction(slug, minter, quantity),
-    osFetch(`/drops/${encodeURIComponent(slug)}/mint`, {
-      method: 'POST',
-      body: { minter: minter.toLowerCase(), quantity },
-      timeout,
-    }).then(data => ({
-      to: data.to || data.target,
-      data: data.data || data.calldata,
-      value: BigInt(data.value || '0'),
-    })),
-  ]);
-
-  if (gqlResult.status === 'fulfilled') return gqlResult.value;
-  if (restResult.status === 'fulfilled') return restResult.value;
-  throw restResult.reason; // REST is more descriptive on error
+  const data = await osFetch(`/drops/${encodeURIComponent(slug)}/mint`, {
+    method: 'POST',
+    body: { minter: minter.toLowerCase(), quantity },
+    timeout,
+  });
+  if (!data.to && !data.target) throw new Error('OpenSea returned incomplete mint transaction data');
+  return { to: data.to || data.target, data: data.data || data.calldata, value: BigInt(data.value || '0'), _source: 'rest-v2' };
 }
 
 /** Prefetch calldata for multiple wallets in parallel — use during prewarm window. */
@@ -147,6 +143,7 @@ module.exports = {
   getCollection,
   getContract,
   getCollectionStats,
+  getSupportedChains,
   getDrop,
   buildDropMintTransaction,
   buildDropMintBatch,

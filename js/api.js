@@ -4,22 +4,9 @@ const RV3_API = {
   healthData: null,
   services: null,
 
-  token() {
-    try { return sessionStorage.getItem('rv3_api_token') || ''; } catch { return ''; }
-  },
-  setToken(t) {
-    try { sessionStorage.setItem('rv3_api_token', t || ''); } catch { /* */ }
-  },
-
   async request(path, opts = {}) {
     const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
-    const tok = this.token();
-    if (tok) headers['X-RV3-Token'] = tok;
-    // Add auth token if available
-    if (typeof RV3_Auth !== 'undefined' && RV3_Auth.getToken()) {
-      headers['X-Auth-Token'] = RV3_Auth.getToken();
-    }
-    const res = await fetch(`/api${path}`, { ...opts, headers });
+    const res = await fetch(`/api${path}`, { ...opts, headers, credentials: 'same-origin' });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || res.statusText || 'API error');
     return data;
@@ -68,28 +55,36 @@ const RV3_API = {
     return this.request('/rpc/env');
   },
 
-  async pingRpc(url, id) {
-    const body = {};
-    if (id) body.id = id;
-    if (url) body.url = url;
-    return this.request('/rpc/ping', { method: 'POST', body: JSON.stringify(body) });
+  async workerStatus() {
+    return this.request('/worker/status');
+  },
+
+  async networks() {
+    return this.request('/networks');
+  },
+
+  async rpcHealth(chain) {
+    return this.request(`/rpc/health?chain=${encodeURIComponent(chain || 'ethereum')}`);
+  },
+
+  async pingRpc(id) {
+    return this.request('/rpc/ping', { method: 'POST', body: JSON.stringify({ id }) });
   },
 
   async listWallets() {
     return this.request('/wallets');
   },
 
-  async previewWallet(privateKey) {
-    return this.request('/wallets/preview', {
-      method: 'POST',
-      body: JSON.stringify({ privateKey }),
-    });
+  async portfolio(chain, minBalance) {
+    const qs = new URLSearchParams({ chain: chain || 'ethereum' });
+    if (minBalance != null) qs.set('minBalance', String(minBalance));
+    return this.request(`/portfolio?${qs}`);
   },
 
-  async importWallet(name, privateKey, balance) {
+  async addExternalWallet(name, address, balance = 0) {
     return this.request('/wallets/import', {
       method: 'POST',
-      body: JSON.stringify({ name, privateKey, balance }),
+      body: JSON.stringify({ name, address, balance }),
     });
   },
 
@@ -125,6 +120,14 @@ const RV3_API = {
     });
   },
 
+  async taskReadiness(id) {
+    return this.request(`/tasks/${encodeURIComponent(id)}/readiness`);
+  },
+
+  async confirmTask(id) {
+    return this.request(`/tasks/${encodeURIComponent(id)}/confirm`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
+  },
+
   async preflightStatus() {
     return this.request('/preflight');
   },
@@ -155,6 +158,22 @@ const RV3_API = {
 
   async diagOpenSea(n = 5) {
     return this.request(`/diag/opensea?n=${n}`);
+  },
+
+  async openSeaStatus() {
+    return this.request('/opensea/status');
+  },
+
+  async theGraphStatus() {
+    return this.request('/thegraph/status');
+  },
+
+  async walletConnectStatus() {
+    return this.request('/signer/walletconnect/status');
+  },
+
+  async walletConnectPair() {
+    return this.request('/signer/walletconnect/pair', { method: 'POST', body: '{}' });
   },
 
   async history() {
@@ -209,6 +228,10 @@ const RV3_API = {
 
   async copymintScan() {
     return this.request('/copymint/scan', { method: 'POST', body: '{}' });
+  },
+
+  async copymintObserve(event) {
+    return this.request('/copymint/observe', { method: 'POST', body: JSON.stringify(event) });
   },
 
   async copymintRemove(id) {

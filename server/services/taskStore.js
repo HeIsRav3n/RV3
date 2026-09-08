@@ -3,15 +3,10 @@
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
+const dbConnection = require('../db');
 
-const USE_DB = !!(process.env.DATABASE_URL || '').trim();
-
-let neon;
-if (USE_DB) {
-  try { neon = require('@neondatabase/serverless').neon; } catch {}
-}
-
-function sql() { return neon(process.env.DATABASE_URL); }
+const USE_DB = dbConnection.useDatabase();
+const sql = dbConnection.sql;
 
 const FILE = path.join(config.dataDir, 'tasks.json');
 
@@ -32,7 +27,7 @@ async function ensureTable() {
 }
 
 async function loadTasks() {
-  if (USE_DB && neon) {
+  if (USE_DB) {
     try {
       await ensureTable();
       const rows = await sql()`
@@ -54,7 +49,7 @@ async function loadTasks() {
 }
 
 async function getTask(id) {
-  if (USE_DB && neon) {
+  if (USE_DB) {
     try {
       await ensureTable();
       const rows = await sql()`SELECT data FROM rv3_tasks WHERE id = ${id}`;
@@ -69,7 +64,7 @@ async function getTask(id) {
 }
 
 async function saveTask(task) {
-  if (USE_DB && neon) {
+  if (USE_DB) {
     try {
       await ensureTable();
       await sql()`
@@ -94,7 +89,7 @@ async function saveTask(task) {
 }
 
 async function updateTaskStatus(id, status, extra = {}) {
-  if (USE_DB && neon) {
+  if (USE_DB) {
     try {
       await sql()`
         UPDATE rv3_tasks
@@ -116,7 +111,7 @@ async function updateTaskStatus(id, status, extra = {}) {
 }
 
 async function deleteTask(id) {
-  if (USE_DB && neon) {
+  if (USE_DB) {
     try {
       await sql()`DELETE FROM rv3_tasks WHERE id = ${id}`;
     } catch (e) {
@@ -130,7 +125,8 @@ async function deleteTask(id) {
   fs.writeFileSync(FILE, JSON.stringify(tasks.filter(t => t.id !== id), null, 2));
 }
 
-// Persist pre-warm calldata (+ optionally pre-signed tx) to Neon so it survives Lambda hops.
+// Persist preflight metadata to PostgreSQL so it survives serverless hops.
+// RV3 intentionally does not store pre-signed transactions.
 async function savePrewarmCache(taskId, walletId, mintTx, signed = null, nonce = null) {
   const entry = {
     to: mintTx.to,

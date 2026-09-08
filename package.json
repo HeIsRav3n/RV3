@@ -7,18 +7,23 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "compile:contracts": "node scripts/compile-contracts.js"
+    "compile:contracts": "node scripts/compile-contracts.js",
+    "test": "node --test test/authSecurity.test.js test/config/validateProductionConfig.test.js test/copymint.test.js test/nonCustodial.test.js test/openseaIntegration.test.js test/policyStore.test.js test/productionPolicy.test.js test/readiness.test.js test/rpcAllowlist.test.js test/theGraph.test.js test/walletConnectSigner.test.js test/workerLease.test.js",
+    "test:config": "node --test test/config/validateProductionConfig.test.js"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
+    "@walletconnect/universal-provider": "^2.23.7",
+    "argon2": "0.45.1",
     "cors": "^2.8.5",
     "dotenv": "^17.0.0",
     "ethers": "^6.13.5",
     "express": "^5.0.0",
-    "express-rate-limit": "^8.0.0"
+    "express-rate-limit": "^8.0.0",
+    "postgres": "^3.4.7"
   },
   "devDependencies": {
     "solc": "^0.8.36"

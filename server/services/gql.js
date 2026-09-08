@@ -1,17 +1,19 @@
 'use strict';
 
 /**
- * OpenSea GQL client — gql.opensea.io/graphql (HTTP/2, browser UA).
- * Used alongside REST for speed: GQL lets us batch drop info + stages in
- * one round-trip instead of 2-3 separate REST calls.
+ * Optional OpenSea GraphQL diagnostic client. OpenSea REST v2 is the supported
+ * RV3 integration. This endpoint is never used unless explicitly enabled.
  */
 
 const GQL_URL = 'https://gql.opensea.io/graphql';
-const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
+const config = require('../config');
 
 const reqCache = new Map(); // dedup in-flight identical requests
 
 async function gqlFetch(query, variables = {}, opts = {}) {
+  if (!config.openseaGraphqlEnabled) {
+    throw new Error('OpenSea GraphQL is disabled. Use the supported REST v2 integration.');
+  }
   const { timeout = 8000, apiKey } = opts;
 
   const body = JSON.stringify({ query, variables });
@@ -26,10 +28,6 @@ async function gqlFetch(query, variables = {}, opts = {}) {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Origin': 'https://opensea.io',
-        'Referer': 'https://opensea.io/',
-        'x-app-id': 'os2-web',
-        'User-Agent': UA,
         'Connection': 'keep-alive',
         ...(apiKey ? { 'X-API-KEY': apiKey } : {}),
       },

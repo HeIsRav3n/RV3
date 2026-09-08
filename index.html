@@ -846,7 +846,7 @@ async function syncFromServer() {
       S.wallets = walletsData.wallets.map(w => ({
         id: w.id, name: w.name, addr: w.addr || w.address, address: w.address || w.addr,
         eth: w.eth || 0, chain: w.chain || 'ETH', low: !!w.low,
-        nonce: 0, serverKey: !!w.hasKey,
+        nonce: 0, signerType: w.signerType || 'external',
       }));
     }
     saveState();
@@ -879,6 +879,57 @@ function apiStatusRows() {
   }
 }
 
+let _commandCenterBusy = false;
+async function refreshCommandCenter() {
+  if (!API_ONLINE || _commandCenterBusy) return;
+  _commandCenterBusy = true;
+  try {
+    const [worker, signer, opensea, graph, rpc, preflight] = await Promise.all([
+      RV3_API.workerStatus(), RV3_API.walletConnectStatus(), RV3_API.openSeaStatus(),
+      RV3_API.theGraphStatus(), RV3_API.rpcHealth('ethereum'), RV3_API.preflightStatus(),
+    ]);
+    S.commandCenter = { worker, signer, opensea, graph, rpc, preflight, refreshedAt: Date.now() };
+  } catch (e) {
+    S.commandCenter = { error: e.message || 'Status refresh failed', refreshedAt: Date.now() };
+  } finally {
+    _commandCenterBusy = false;
+    if (document.getElementById('nav-overview')?.classList.contains('act')) renderOverview();
+  }
+}
+
+function commandCenterCard() {
+  const cc = S.commandCenter;
+  if (!API_ONLINE) return `<div class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt">Command-center status is unavailable while the backend is offline.</div></div>`;
+  if (!cc) return `<div class="card" style="margin-bottom:14px;padding:14px"><div style="font-size:12px;color:var(--text2)">Loading live readiness signals…</div></div>`;
+  if (cc.error) return `<div class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt">Readiness refresh failed: ${esc(cc.error)}</div></div>`;
+  const worker = cc.worker?.worker || {};
+  const live = cc.worker?.liveReadiness || {};
+  const graphChecks = cc.graph?.checks || [];
+  const graphOk = graphChecks.length > 0 && graphChecks.every(check => check.mode === 'ok');
+  const rpcHealthy = Number(cc.rpc?.healthy || 0);
+  const rpcTotal = (cc.rpc?.endpoints || []).length;
+  const rows = [
+    { label: 'Execution mode', value: live.liveExecutionEnabled ? 'GATED LIVE' : 'PREFLIGHT ONLY', ok: !live.liveExecutionEnabled, note: live.liveExecutionEnabled ? 'Requires every policy gate' : 'No signing or broadcast' },
+    { label: 'WalletConnect', value: cc.signer?.connected ? 'PAIRED' : (cc.signer?.configured ? 'NOT PAIRED' : 'NOT CONFIGURED'), ok: !!cc.signer?.connected, note: cc.signer?.connected ? 'Wallet approves each request' : 'External signer required' },
+    { label: 'OpenSea REST', value: cc.opensea?.rest === 'ok' ? 'ONLINE' : (cc.opensea?.configured ? 'UNAVAILABLE' : 'NOT CONFIGURED'), ok: cc.opensea?.rest === 'ok', note: `GraphQL ${cc.opensea?.graphql || 'disabled'}` },
+    { label: 'The Graph', value: graphOk ? 'HEALTHY' : 'READ-ONLY / OFFLINE', ok: graphOk, note: 'Never used for FCFS triggering' },
+    { label: 'Ethereum RPC', value: `${rpcHealthy}/${rpcTotal || 0} HEALTHY`, ok: rpcHealthy > 0, note: cc.rpc?.chain ? fmtChain(cc.rpc.chain) : 'No approved endpoint' },
+    { label: 'Worker', value: worker?.running ? 'ACTIVE' : (worker?.online ? 'ONLINE' : 'CHECKING'), ok: !!worker?.online || !!worker?.running, note: live.durableDatabaseConfigured ? 'Durable policy store connected' : 'Durable policy store required' },
+  ];
+  const blockers = [
+    !live.liveExecutionEnabled ? 'Live mode is disabled' : null,
+    !cc.signer?.connected ? 'Pair the operator wallet through WalletConnect' : null,
+    !live.durableDatabaseConfigured ? 'Configure durable PostgreSQL policy storage' : null,
+    rpcHealthy < 1 ? 'Configure a healthy approved Ethereum RPC' : null,
+    ...(cc.preflight?.tasks || []).filter(task => task.ready === false).slice(0, 2).map(task => `Task “${task.name || task.drop || task.id}” is not ready`),
+  ].filter(Boolean);
+  return `<div class="section-lbl">Beta command center <button class="btn btn-xs" style="float:right" onclick="refreshCommandCenter()">Refresh signals</button></div>
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0;border-bottom:1px solid var(--border)">${rows.map(row => `<div style="padding:12px;border-right:1px solid var(--border);min-width:0"><div style="font-size:9px;letter-spacing:.6px;text-transform:uppercase;color:var(--text3);font-weight:700">${esc(row.label)}</div><div class="st ${row.ok ? 'st-ok' : 'st-pend'}" style="margin-top:6px;font-size:9px">${esc(row.value)}</div><div style="margin-top:6px;font-size:10px;color:var(--text2)">${esc(row.note)}</div></div>`).join('')}</div>
+      <div style="padding:11px 14px;font-size:11px;color:var(--text2)"><strong style="color:var(--text)">Activation blockers:</strong> ${blockers.length ? blockers.map(esc).join(' · ') : 'No blocker reported; review each policy gate before enabling live mode.'}</div>
+    </div>`;
+}
+
 // STATE
 const S = {
   wallets: [],
@@ -886,6 +937,7 @@ const S = {
   tasks: [],
   history: [],
   logs: [],
+  commandCenter: null,
   rpcs: [],
   ethUsd: 1691,
   gasGwei: null,
@@ -897,9 +949,6 @@ const S = {
     defaultGasPreset: 'normal',
     rpcBlast: true,
     rpcPrewarm: true,
-    discordWebhook: '',
-    telegramToken: '',
-    telegramChatId: '',
     notifyMintRun: true,
     notifyFundTransfer: true,
     notifyLowBalance: true,
@@ -969,11 +1018,11 @@ function rpcUrlsForChain(chain) {
   const c = normalizeChainSlug(chain);
   return (S.rpcs || []).filter(r => {
     if (r.active === false) return false;
-    const url = r.urlFull || r.url;
+    const url = r.url;
     if (!url || !String(url).startsWith('https://')) return false;
     const rc = r.chain ? normalizeChainSlug(r.chain) : inferChainFromRpcUrl(url);
     return !rc || rc === c;
-  }).map(r => r.urlFull || r.url);
+  }).map(r => r.url);
 }
 function chainHasRpc(chain) {
   const c = normalizeChainSlug(chain);
@@ -1000,23 +1049,12 @@ function saveState() {
       wallets: S.wallets, drops: S.drops, tasks: S.tasks, history: S.history,
     }));
   } catch(e) { /* quota or private mode */ }
-  // RPCs and settings persist across sessions in localStorage
-  try { localStorage.setItem('rv3_rpcs', JSON.stringify(S.rpcs)); } catch {}
   try { localStorage.setItem('rv3_settings', JSON.stringify(S.settings)); } catch {}
 }
 function loadState() {
-  // Load RPCs from localStorage first (survives tab close)
-  try {
-    const raw = localStorage.getItem('rv3_rpcs');
-    if (raw) {
-      const d = JSON.parse(raw);
-      if (Array.isArray(d)) S.rpcs = d.slice(0,50).filter(r => r && typeof r.id === 'string' && isHttpsUrl(r.url)).map(r => ({
-        id: clip(r.id,64), name: clip(r.name,40), role: ['Primary','Blast','Private'].includes(r.role)?r.role:'Private',
-        url: r.url, ms: r.ms==null?null:sanitizeInt(r.ms,0,60000), active: r.active!==false,
-        chain: r.chain ? clip(r.chain, 20) : null, urlFull: r.urlFull && isHttpsUrl(r.urlFull) ? r.urlFull : undefined,
-      }));
-    }
-  } catch {}
+  // Remove endpoint URLs from older browser builds. RPCs now come only from
+  // server-side configuration and are returned in redacted form.
+  try { localStorage.removeItem('rv3_rpcs'); } catch {}
   // Load settings from localStorage
   try {
     const raw = localStorage.getItem('rv3_settings');
@@ -1027,10 +1065,12 @@ function loadState() {
         maxSpendEth: clip(s.maxSpendEth,20), lowBalanceAlert: clip(s.lowBalanceAlert,20),
         defaultGasPreset: ['slow','normal','fast','turbo','custom'].includes(s.defaultGasPreset)?s.defaultGasPreset:S.settings.defaultGasPreset,
         rpcBlast: !!s.rpcBlast, rpcPrewarm: !!s.rpcPrewarm,
-        discordWebhook: isHttpsUrl(s.discordWebhook)?clip(s.discordWebhook,300):'',
-        telegramToken: clip(s.telegramToken,120), telegramChatId: clip(s.telegramChatId,30),
         notifyMintRun: s.notifyMintRun!==false, notifyFundTransfer: s.notifyFundTransfer!==false, notifyLowBalance: s.notifyLowBalance!==false
       });
+      // Remove notification credentials saved by older browser builds. They
+      // belong in server-side environment configuration, never browser storage.
+      delete s.discordWebhook; delete s.telegramToken; delete s.telegramChatId;
+      localStorage.setItem('rv3_settings', JSON.stringify(S.settings));
     }
   } catch {}
   try {
@@ -1083,7 +1123,7 @@ function loadState() {
       })) : [],
     }));
     if(Array.isArray(d.history)) S.history = d.history.slice(0, 500);
-    // rpcs and settings now come from localStorage (loaded above), not sessionStorage
+    // Settings may be local; RPC configuration always comes from the server.
   } catch(e) { localStorage.removeItem('rv3_state'); }
 }
 
@@ -1149,7 +1189,7 @@ function updateBadges() {
 
 // ── COMMAND ──
 function walletHasKey(w) {
-  return !!(w.serverKey || w.hasKey || w.encryptedKey);
+  return w.signerType === 'external' && !!w.externalSignerReady;
 }
 const FLEET_BAL = {};
 let _fleetBalAt = 0;
@@ -1305,6 +1345,16 @@ function renderOverview() {
   const logFeed = (S.logs || []).slice(0, 8);
   const mixQ = queued.length, mixR = running.length, mixC = confirmed, mixF = failedHist;
   const mixTot = mixQ + mixR + mixC + mixF || 1;
+  const serviceHealth = RV3_API.healthData?.services || {};
+  const attention = [
+    !API_ONLINE ? { text: 'Backend is offline — readiness cannot be refreshed.', go: 'settings' } : null,
+    !serviceHealth.database ? { text: 'Durable PostgreSQL policy store is not connected.', go: 'settings' } : null,
+    !serviceHealth.signerProvider ? { text: 'External signer is not connected; live requests remain blocked.', go: 'wallets' } : null,
+    !serviceHealth.eventProvider ? { text: 'Read-only event provider is not configured for automatic discovery.', go: 'settings' } : null,
+    missingRpc.length ? { text: `No approved RPC for ${missingRpc.map(fmtChain).join(', ')}.`, go: 'settings' } : null,
+  ].filter(Boolean);
+  const attentionCard = `<div class="section-lbl">Operator attention</div>
+<div class="card" style="margin-bottom:14px">${attention.length ? attention.map(item => `<div class="rr" style="cursor:pointer" onclick="go('${item.go}')"><div class="rd" style="background:var(--amber)"></div><div class="ri"><div class="rn">Review required</div><div class="rm">${esc(item.text)}</div></div><div class="st st-pend">ACTION</div></div>`).join('') : `<div class="rr"><div class="rd" style="background:var(--green)"></div><div class="ri"><div class="rn">No immediate operator blockers</div><div class="rm">Continue monitoring readiness before requesting approval.</div></div><div class="st st-ok">CLEAR</div></div>`}</div>`;
 
   const liveNow = liveDrops.length ? `
   <div class="section-lbl">Live now</div>
@@ -1321,6 +1371,7 @@ function renderOverview() {
 
   document.getElementById('tba').innerHTML = `
     <button class="btn btn-sm" onclick="ovRefresh(true)" title="Refresh">⟳ Refresh</button>
+    <button class="btn btn-sm" onclick="refreshCommandCenter()" title="Refresh command-center signals">⌁ Signals</button>
     ${queued.length ? `<button class="btn btn-sm" onclick="runPreflightAll()" title="Pre-warm all armed tasks">⚡ Preflight</button>` : ''}
     ${queued.length || running.length ? `<button class="btn btn-p btn-sm" onclick="go('warroom')">War room</button>` : ''}`;
 
@@ -1335,6 +1386,8 @@ ${chainRow}
 ${wr.low || wr.unfunded ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt">${wr.low + wr.unfunded} wallet${wr.low + wr.unfunded > 1 ? 's' : ''} not ready. <span style="color:var(--accent3);cursor:pointer" onclick="go('wallets')">Review fleet</span> or <span style="color:var(--accent3);cursor:pointer" onclick="go('fund')">fund</span>.</div></div>` : ''}
 ${!S.wallets.length ? `<div class="ban ban-i"><div class="ban-ico">ℹ</div><div class="ban-txt">No wallets added. <span style="color:var(--accent3);cursor:pointer" onclick="go('wallets')">Add wallets</span> to get started.</div></div>` : ''}
 ${!S.rpcs.length ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt">No RPC endpoints. <span style="color:var(--accent3);cursor:pointer" onclick="go('settings')">Add in Settings</span> for live execution.</div></div>` : ''}
+${commandCenterCard()}
+${attentionCard}
 <div class="pipe">${pipe.map(p => `
   <div class="pipe-step ${p.cls}" onclick="go('${p.go}')">
     <div class="pipe-n">${p.n}</div>
@@ -1430,6 +1483,9 @@ ${!S.rpcs.length ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div cl
     refreshFleetBals(activeOpChains()).then(changed => {
       if (changed && document.getElementById('nav-overview')?.classList.contains('act')) renderOverview();
     });
+  }
+  if (!S.commandCenter || Date.now() - S.commandCenter.refreshedAt > 15000) {
+    setTimeout(() => refreshCommandCenter(), 0);
   }
 }
 
@@ -1639,8 +1695,7 @@ function renderWallets() {
     <select class="fs" style="width:130px;height:28px;font-size:11.5px" onchange="walletViewChain(this.value)" title="Show balances on chain">
       ${WALLET_VIEW_CHAINS.map(([v,l])=>`<option value="${v}"${WALLET_VIEW_CHAIN===v?' selected':''}>${l}</option>`).join('')}
     </select>
-    <button class="btn btn-sm" onclick="walletImport()">Import</button>
-    <button class="btn btn-p btn-sm" onclick="walletGenerate()">+ Generate</button>
+    <button class="btn btn-p btn-sm" onclick="walletImport()">+ Add external signer</button>
   `;
   const counts = walletReadyCounts();
   const shown = S.wallets.filter(w => WALLET_READY_FILTER === 'all' || walletReadiness(w) === WALLET_READY_FILTER);
@@ -1680,25 +1735,24 @@ ${S.wallets.length ? `
 <div class="card"><div class="es">
   <div class="es-icon">◫</div>
   <div class="es-title">No wallets added</div>
-  <div class="es-sub">Import a private key or generate a new wallet</div>
+  <div class="es-sub">Add a public address for an external signer. RV3 never accepts signing material.</div>
   <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
-    <button class="btn" onclick="walletImport()">Import wallet</button>
-    <button class="btn btn-p" onclick="walletGenerate()">Generate new</button>
+    <button class="btn btn-p" onclick="walletImport()">Add external signer</button>
   </div>
 </div></div>`}
 
 <!-- ADD WALLET FORM -->
 <div class="card" id="wallet-add-card" style="display:none">
-  <div class="card-hd"><h2 id="wadd-title">Import Wallet</h2></div>
+  <div class="card-hd"><h2 id="wadd-title">Add External Signer</h2></div>
   <div class="card-body">
     <div class="fg">
       <label class="fl" for="wadd-name">Label / Name</label>
       <input class="fi" id="wadd-name" placeholder="e.g. Mint wallet 1" maxlength="30">
     </div>
     <div class="fg">
-      <label class="fl" for="wadd-key">Private Key or Address</label>
-      <input class="fi" id="wadd-key" type="password" placeholder="0x..." maxlength="66" autocomplete="off" oninput="walletKeyInput(this.value)">
-      <div style="font-size:10px;color:var(--text3);margin-top:4px">Key is encrypted server-side and never stored in the browser.</div>
+      <label class="fl" for="wadd-key">External signer address</label>
+      <input class="fi" id="wadd-key" inputmode="text" placeholder="0x..." maxlength="42" autocomplete="off">
+      <div style="font-size:10px;color:var(--text3);margin-top:4px">Only a public address is stored. RV3 never accepts or stores signing material.</div>
     </div>
     <div id="wadd-preview" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:10px 12px;margin-bottom:4px">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -1784,9 +1838,6 @@ async function walletBatchDelete() {
   }
 }
 
-let _walletPreviewTimer = null;
-let _walletPreviewData = null;
-
 function walletAddClose() {
   const card = document.getElementById('wallet-add-card');
   if (card) card.style.display = 'none';
@@ -1794,95 +1845,40 @@ function walletAddClose() {
   if (key) key.value = '';
   const preview = document.getElementById('wadd-preview');
   if (preview) preview.style.display = 'none';
-  _walletPreviewData = null;
 }
 
 function walletImport() {
   const card = document.getElementById('wallet-add-card');
   if (card) {
     card.style.display = 'block';
-    document.getElementById('wadd-title').textContent = 'Import Wallet';
+    document.getElementById('wadd-title').textContent = 'Add External Signer';
     document.getElementById('wadd-name').value = '';
     const key = document.getElementById('wadd-key');
     if (key) key.value = '';
     const preview = document.getElementById('wadd-preview');
     if (preview) preview.style.display = 'none';
-    _walletPreviewData = null;
   }
-}
-
-function walletGenerate() {
-  const card = document.getElementById('wallet-add-card');
-  if (card) {
-    card.style.display = 'block';
-    document.getElementById('wadd-title').textContent = 'Generate New Wallet';
-    document.getElementById('wadd-name').value = '';
-    const key = document.getElementById('wadd-key');
-    if (key) key.value = '';
-    const preview = document.getElementById('wadd-preview');
-    if (preview) preview.style.display = 'none';
-    _walletPreviewData = null;
-  }
-}
-
-function walletKeyInput(val) {
-  const raw = val.trim();
-  const preview = document.getElementById('wadd-preview');
-  const statusEl = document.getElementById('wadd-preview-status');
-  const addrEl = document.getElementById('wadd-preview-addr');
-  const balEl = document.getElementById('wadd-preview-bal');
-  _walletPreviewData = null;
-
-  clearTimeout(_walletPreviewTimer);
-
-  const keyLen = raw.replace(/^0x/i, '').length;
-  if (keyLen < 64) {
-    if (preview) preview.style.display = 'none';
-    return;
-  }
-
-  if (preview) preview.style.display = 'block';
-  if (statusEl) statusEl.textContent = 'Detecting…';
-  if (addrEl) addrEl.textContent = '';
-  if (balEl) balEl.textContent = '';
-
-  _walletPreviewTimer = setTimeout(async () => {
-    try {
-      const data = await RV3_API.previewWallet(raw);
-      _walletPreviewData = data;
-      if (statusEl) statusEl.textContent = '';
-      if (addrEl) addrEl.textContent = data.address;
-      if (balEl) balEl.textContent = data.eth != null ? `${parseFloat(data.eth).toFixed(4)} ETH` : '';
-    } catch (e) {
-      if (statusEl) statusEl.textContent = e.message || 'Invalid key';
-      if (addrEl) addrEl.textContent = '';
-      if (balEl) balEl.textContent = '';
-      _walletPreviewData = null;
-    }
-  }, 600);
 }
 
 async function walletSave() {
   const name = document.getElementById('wadd-name')?.value?.trim();
-  const key = document.getElementById('wadd-key')?.value?.trim();
+  const address = document.getElementById('wadd-key')?.value?.trim();
   if (!name) { toast('Enter a wallet name', '⚠'); return; }
-  if (!key) { toast('Enter a private key', '⚠'); return; }
-
-  const bal = _walletPreviewData?.eth ?? 0;
+  if (!/^0x[a-fA-F0-9]{40}$/.test(address || '')) { toast('Enter a valid external signer address', '⚠'); return; }
+  const bal = 0;
   const keyEl = document.getElementById('wadd-key');
 
   try {
-    const { wallet } = await RV3_API.importWallet(name, key, bal);
+    const { wallet } = await RV3_API.addExternalWallet(name, address, bal);
     S.wallets.push({
       id: wallet.id, name: wallet.name, addr: wallet.addr,
       address: wallet.address, eth: wallet.eth || bal,
-      nonce: 0, chain: 'ETH', low: (wallet.eth || bal) < 0.01, serverKey: true,
+      nonce: 0, chain: 'ETH', low: (wallet.eth || bal) < 0.01, signerType: 'external',
     });
     if (keyEl) keyEl.value = '';
-    _walletPreviewData = null;
     saveState(); updateBadges();
     walletAddClose();
-    toast(`Wallet "${name}" imported`, '✓');
+    toast(`External signer "${name}" added`, '✓');
     go('wallets');
   } catch (e) {
     toast(e.message || 'Import failed', '⚠');
@@ -2125,12 +2121,12 @@ async function cancelTask(id) {
 }
 
 async function taskRunNow(id) {
-  if (!API_ONLINE) { toast('Backend required to run tasks','⚠'); return; }
+  if (!API_ONLINE) { toast('Backend required to request a task run','⚠'); return; }
   const task = S.tasks.find(t => t.id === id);
   try {
-    toast('Executing…','⚡');
+    toast('Submitting policy-checked request…','⚡');
     await RV3_API.runTaskNow(id, task);
-    toast('Broadcast — polling for confirmation','✓');
+    toast('Request accepted — monitoring task state','✓');
     // Update local state and start polling
     if (task) { task.status = 'broadcast'; saveState(); }
     go('warroom');
@@ -2235,7 +2231,7 @@ async function runPreflightAll() {
   if (!API_ONLINE) { toast('Backend required','⚠'); return; }
   if (PF.running) return;
   PF.running = true;
-  toast('Preflight — simulating + pre-signing armed tasks','⚡');
+  toast('Preflight — checking approved RPCs and task readiness','⚡');
   try {
     const data = await RV3_API.runPreflight();
     PF.tasks = data.tasks || [];
@@ -2278,12 +2274,12 @@ function renderPreflight() {
 
   c.innerHTML = `
 <div class="stats-row" style="grid-template-columns:repeat(3,1fr)">
-  <div class="sc s-a"><div class="sc-lbl">Armed</div><div class="sc-val">${queued.length}</div><div class="sc-sub">Queued to fire</div></div>
+  <div class="sc s-a"><div class="sc-lbl">Queued</div><div class="sc-val">${queued.length}</div><div class="sc-sub">Awaiting review</div></div>
   <div class="sc s-g"><div class="sc-lbl">Warm</div><div class="sc-val">${queued.filter(t=>t.warmed).length}</div><div class="sc-sub">Calldata + sim cached</div></div>
-  <div class="sc s-${PF.liveMint ? 'g' : 'o'}"><div class="sc-lbl">Live mint</div><div class="sc-val" style="font-size:16px">${PF.liveMint ? 'ON' : 'SIM'}</div><div class="sc-sub">${PF.liveMint ? 'Broadcast enabled' : 'ENABLE_LIVE_MINT off'}</div></div>
+  <div class="sc s-${PF.liveMint ? 'g' : 'o'}"><div class="sc-lbl">Execution policy</div><div class="sc-val" style="font-size:16px">${PF.liveMint ? 'GATED' : 'PREP'}</div><div class="sc-sub">${PF.liveMint ? 'Signer + policy required' : 'Preflight only'}</div></div>
 </div>
-${!API_ONLINE ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt">Backend offline — start <code>npm start</code> to simulate and pre-sign.</div></div>` : ''}
-${queued.length ? '' : `<div class="card"><div class="es"><div class="es-title">Nothing armed</div><div class="es-sub">Create a mint task, then preflight before you fire</div><button class="btn btn-p" onclick="openModal()" style="margin-top:12px">New mint task</button></div></div>`}
+${!API_ONLINE ? `<div class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt">Backend offline — start <code>npm start</code> to inspect task readiness.</div></div>` : ''}
+${queued.length ? '' : `<div class="card"><div class="es"><div class="es-title">No queued tasks</div><div class="es-sub">Create a mint task, then run a preflight before requesting approval.</div><button class="btn btn-p" onclick="openModal()" style="margin-top:12px">New mint task</button></div></div>`}
 ${rows.length ? `
 <div class="section-lbl">Gates</div>
 <div class="card" style="overflow-x:auto">
@@ -2304,13 +2300,13 @@ ${rows.length ? `
         <td>${gate(warmOk, warmN + '/' + need, (warmN || 0) + '/' + need)}</td>
         <td style="white-space:nowrap">
           <button class="btn btn-xs" onclick="taskPrewarm('${esc(t.id)}')">⚡ Warm</button>
-          ${t.ready || warmOk ? `<button class="btn btn-p btn-xs" onclick="taskRunNow('${esc(t.id)}')">▶ Fire</button>` : ''}
+          ${t.ready || warmOk ? `<button class="btn btn-p btn-xs" onclick="taskRunNow('${esc(t.id)}')">Request</button>` : ''}
         </td>
       </tr>`;
     }).join('')}</tbody>
   </table>
 </div>` : ''}
-<div class="ban ban-i"><div class="ban-ico">ℹ</div><div class="ban-txt">Preflight fetches calldata, simulates each wallet, and pre-signs with extra fee headroom so Fire is a single broadcast. Flashbots routes stay Ethereum-only.</div></div>`;
+<div class="ban ban-i"><div class="ban-ico">ℹ</div><div class="ban-txt">Preflight checks collection data, approved RPCs, wallet readiness, and scheduling. It never signs or broadcasts; external signer approval is required for any live request.</div></div>`;
 
   if (API_ONLINE && !PF.loaded && !PF.running) {
     PF.loaded = true;
@@ -2353,7 +2349,7 @@ function renderCopyMint() {
 
   const walletOpts = S.wallets.length
     ? S.wallets.map(w => `<label class="cm-wsel"><input type="checkbox" value="${esc(w.id)}" class="cm-w-cb"> ${esc(w.name)} <span style="color:var(--text3)">${esc(w.addr || '')}</span></label>`).join('')
-    : '<div style="color:var(--text3);font-size:12px">No wallets with server keys — import in Wallets first.</div>';
+    : '<div style="color:var(--text3);font-size:12px">No external wallet addresses added yet.</div>';
 
   const st = S.copymint.status;
   const statusPill = st
@@ -2566,7 +2562,7 @@ function renderDeleg() {
   <div class="card-body">
     <div class="frow">
       <div class="fg"><label class="fl">Operator wallet</label>
-        <select class="fs" id="deleg-owner">${S.wallets.filter(w=>w.hasKey!==false).length ? S.wallets.map(w=>`<option value="${esc(w.id)}">${esc(w.name)} — ${esc(w.addr)} (${(w.eth||0).toFixed(4)} ETH)</option>`).join('') : '<option value="" disabled>No wallets — import one with its private key first</option>'}</select>
+        <select class="fs" id="deleg-owner">${S.wallets.filter(w=>w.signerType==='external').length ? S.wallets.filter(w=>w.signerType==='external').map(w=>`<option value="${esc(w.id)}">${esc(w.name)} — ${esc(w.addr)} (${(w.eth||0).toFixed(4)} ETH)</option>`).join('') : '<option value="" disabled>Add an external signer address first</option>'}</select>
       </div>
       <div class="fg"><label class="fl">Chain</label>
         <select class="fs" id="deleg-chain">${DELEG_CHAINS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select>
@@ -2643,13 +2639,13 @@ async function delegRefresh() {
 async function delegDeploy() {
   if (!API_ONLINE) return toast('Start the backend (npm start) to deploy','ℹ');
   const ownerWalletId = document.getElementById('deleg-owner')?.value;
-  if (!ownerWalletId) return toast('Add a wallet with its private key first','⚠');
+  if (!ownerWalletId) return toast('Add an external signer address first','⚠');
   const body = {
     ownerWalletId,
     chain: document.getElementById('deleg-chain')?.value || 'ethereum',
     label: document.getElementById('deleg-label')?.value || 'Batch executor',
     gasPreset: document.getElementById('deleg-gas')?.value || 'normal',
-    rpcUrls: S.rpcs.map(r => r.urlFull || r.url).filter(u => u.startsWith('https://')),
+    rpcUrls: [],
   };
   const btn = document.getElementById('deleg-deploy-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Deploying… (~1 block)'; }
@@ -2679,7 +2675,7 @@ async function delegMint(id) {
     qty: parseInt(document.getElementById(`dm-qty-${id}`)?.value, 10) || 1,
     count: parseInt(document.getElementById(`dm-count-${id}`)?.value, 10) || 1,
     gasPreset: document.getElementById(`dm-gas-${id}`)?.value || 'normal',
-    rpcUrls: S.rpcs.map(r => r.urlFull || r.url).filter(u => u.startsWith('https://')),
+    rpcUrls: [],
   };
   toast('Submitting batch mint…','⚡');
   try {
@@ -2699,7 +2695,7 @@ async function delegSweep(id) {
   try {
     const { result } = await RV3_API.delegationSweep(id, {
       to: to.trim() || null,
-      rpcUrls: S.rpcs.map(r => r.urlFull || r.url).filter(u => u.startsWith('https://')),
+      rpcUrls: [],
     });
     toast(result.swept ? `Swept ${result.swept} NFT(s)` : 'No NFTs to sweep','✓');
     await delegRefresh();
@@ -2713,7 +2709,7 @@ async function delegWithdraw(id) {
   try {
     const { result } = await RV3_API.delegationWithdraw(id, {
       to: to.trim() || null,
-      rpcUrls: S.rpcs.map(r => r.urlFull || r.url).filter(u => u.startsWith('https://')),
+      rpcUrls: [],
     });
     toast(result.txHash ? `Withdrew ${result.withdrawn} ETH` : 'Nothing to withdraw','✓');
     await delegRefresh();
@@ -2816,14 +2812,21 @@ function renderSettings() {
 <div class="card" style="margin-bottom:14px;border-color:rgba(74,124,252,.28)">
   <div class="card-hd"><h2>🔌 Backend &amp; .env</h2><span class="st ${API_ONLINE?'st-ok':'st-fail'}" id="api-badge" style="font-size:9px">${API_ONLINE?'ONLINE':'OFFLINE'}</span></div>
   <div class="card-body">
-    <div style="font-size:11.5px;color:var(--text2);margin-bottom:10px">API keys live in <code>.env</code> — never in the browser. Edit <code>.env</code> then restart <code>npm start</code>.</div>
+    <div style="font-size:11.5px;color:var(--text2);margin-bottom:10px">Service credentials live in <code>.env</code> — never in the browser. This UI uses your secure session cookie only.</div>
     <div id="api-svc-rows">${apiStatusRows()}</div>
-    <div class="fg" style="margin-top:12px;margin-bottom:0">
-      <label class="fl" for="s-apitoken">API token (matches API_SECRET in .env)</label>
-      <input class="fi" id="s-apitoken" type="password" placeholder="rv3_local_dev_change_this" value="${esc(RV3_API.token())}" autocomplete="off">
-      <div style="font-size:10px;color:var(--text3);margin-top:3px">Stored in session only. Required when API_SECRET is set.</div>
-    </div>
     <button class="btn btn-sm" onclick="apiReconnect()" style="margin-top:10px">⟳ Reconnect backend</button>
+  </div>
+</div>
+<div class="card" style="margin-bottom:14px">
+  <div class="card-hd"><h2>🔐 WalletConnect external signer</h2><span class="st st-pend" id="wc-badge" style="font-size:9px">CHECKING</span></div>
+  <div class="card-body">
+    <div id="wc-state" style="font-size:11.5px;color:var(--text2);margin-bottom:10px">Checking external-signer readiness…</div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap">
+      <button class="btn btn-p btn-sm" onclick="beginWalletConnectPairing()" id="wc-pair-btn">Pair operator wallet</button>
+      <button class="btn btn-sm" onclick="refreshWalletConnectStatus()">Refresh status</button>
+    </div>
+    <div id="wc-pair-link" style="margin-top:10px;font-size:11px;color:var(--text2)"></div>
+    <div style="font-size:10px;color:var(--text3);margin-top:9px">Pairing permits only reviewed Ethereum or Robinhood requests. Your wallet approves every transaction; RV3 never receives signing material or a raw signature.</div>
   </div>
 </div>
 <div class="card" style="margin-bottom:14px">
@@ -2853,31 +2856,17 @@ function renderSettings() {
         </select>
       </div>
     </div>
-    <div class="tog-row"><span>RPC blasting — all endpoints fire simultaneously</span><label class="tog"><input type="checkbox" id="s-blast" ${S.settings.rpcBlast?'checked':''}><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
-    <div class="tog-row"><span>RPC pre-warm — ping all RPCs right before execute</span><label class="tog"><input type="checkbox" id="s-prewarm" ${S.settings.rpcPrewarm?'checked':''}><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
+    <div class="tog-row"><span>Multi-RPC readiness checks</span><label class="tog"><input type="checkbox" id="s-blast" ${S.settings.rpcBlast?'checked':''}><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
+    <div class="tog-row"><span>RPC pre-warm — ping approved RPCs before review</span><label class="tog"><input type="checkbox" id="s-prewarm" ${S.settings.rpcPrewarm?'checked':''}><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
   </div>
 </div>
 
 <div class="card" style="margin-bottom:14px">
-  <div class="card-hd"><h2>⚡ RPC Endpoints</h2><button class="btn btn-p btn-xs" onclick="rpcAdd()">+ Add</button></div>
+  <div class="card-hd"><h2>⚡ Approved RPC Endpoints</h2></div>
   <div class="card-body">
-    <div style="font-size:11.5px;color:var(--text2);margin-bottom:10px">Add your Alchemy/Infura/QuickNode/dRPC URLs. RPC blast signs once and broadcasts to ALL endpoints simultaneously. First confirmation wins.</div>
+    <div style="font-size:11.5px;color:var(--text2);margin-bottom:10px">Endpoints are configured server-side and displayed redacted here. RV3 uses them for read checks and preflight; a separate approved signer is required for any live request.</div>
     <div id="rpc-list">
-      ${S.rpcs.length ? S.rpcs.map(r=>rpcRowHTML(r)).join('') : '<div class="ban ban-w" style="margin:0"><div class="ban-ico">⚠</div><div class="ban-txt">No RPC endpoints — add at least one to start minting</div></div>'}
-    </div>
-    <div id="rpc-add-form" style="display:none;margin-top:10px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:12px">
-      <div class="frow">
-        <div class="fg"><label class="fl">Label</label><input class="fi" id="rpc-new-name" placeholder="e.g. Alchemy mainnet" maxlength="30"></div>
-        <div class="fg"><label class="fl">Role</label><select class="fs" id="rpc-new-role"><option value="Primary">Primary</option><option value="Blast">Blast</option><option value="Private">Private</option></select></div>
-      </div>
-      <div class="frow">
-        <div class="fg"><label class="fl">Chain</label><select class="fs" id="rpc-new-chain"><option value="ethereum">Ethereum</option><option value="robinhood">Robinhood</option><option value="base">Base</option><option value="blast">Blast</option><option value="polygon">Polygon</option></select></div>
-        <div class="fg"><label class="fl">RPC URL</label><input class="fi" id="rpc-new-url" placeholder="https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY" type="url"></div>
-      </div>
-      <div style="display:flex;gap:7px">
-        <button class="btn btn-p btn-sm" onclick="rpcSave()">Save endpoint</button>
-        <button class="btn btn-sm" onclick="document.getElementById('rpc-add-form').style.display='none'">Cancel</button>
-      </div>
+      ${S.rpcs.length ? S.rpcs.map(r=>rpcRowHTML(r)).join('') : '<div class="ban ban-w" style="margin:0"><div class="ban-ico">⚠</div><div class="ban-txt">No approved RPC endpoints are configured on the server.</div></div>'}
     </div>
     <button class="btn btn-sm" onclick="rpcBenchmark()" style="margin-top:8px">⟳ Benchmark all</button>
   </div>
@@ -2886,15 +2875,11 @@ function renderSettings() {
 <div class="card" style="margin-bottom:14px">
   <div class="card-hd"><h2>🔔 Notifications</h2></div>
   <div class="card-body">
-    <div class="frow">
-      <div class="fg"><label class="fl" for="s-discord">Discord webhook URL</label><input class="fi" id="s-discord" placeholder="https://discord.com/api/webhooks/..." value="${esc(S.settings.discordWebhook)}"></div>
-      <div class="fg"><label class="fl" for="s-tgtoken">Telegram bot token</label><input class="fi" id="s-tgtoken" placeholder="123456:ABC..." value="${esc(S.settings.telegramToken)}"></div>
-    </div>
-    <div class="fg"><label class="fl" for="s-tgchat">Telegram chat ID</label><input class="fi" id="s-tgchat" placeholder="-100..." style="max-width:220px" value="${esc(S.settings.telegramChatId)}"></div>
+    <div class="ban ban-i" style="margin:0 0 10px"><div class="ban-ico">ℹ</div><div class="ban-txt">Configure Discord or Telegram only as server-side environment secrets. RV3 does not collect or store notification credentials in this browser.</div></div>
     <div class="tog-row"><span>Mint runs (success, partial, failed)</span><label class="tog"><input type="checkbox" id="s-n1" ${S.settings.notifyMintRun?'checked':''}><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
     <div class="tog-row"><span>Fund transfers — distribute, consolidate, split gas</span><label class="tog"><input type="checkbox" id="s-n2" ${S.settings.notifyFundTransfer?'checked':''}><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
     <div class="tog-row"><span>Low wallet balance (once per day)</span><label class="tog"><input type="checkbox" id="s-n3" ${S.settings.notifyLowBalance?'checked':''}><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
-    <button class="btn btn-sm" onclick="testNotify()" style="margin-top:8px">Send test notification</button>
+    <button class="btn btn-sm" onclick="testNotify()" style="margin-top:8px">Send configured test notification</button>
   </div>
 </div>
 
@@ -2924,10 +2909,10 @@ ${RV3_Auth.isAdmin() ? `
   <div class="card-hd"><h2>🛡 Inclusion routes</h2></div>
   <div class="card-body" style="font-size:12px;line-height:1.9;color:var(--text2)">
     <div><strong style="color:var(--text)">Public</strong> — standard mempool. No MEV protection.</div>
-    <div><strong style="color:var(--text)">Direct RPC</strong> — signs once, blasts to all your endpoints in parallel. No Flashbots.</div>
-    <div><strong style="color:var(--text)">Flashbots Protect</strong> — private relay via <code>ETH_RPC_PRIVATE</code>. Sandwich-resistant.</div>
-    <div><strong style="color:var(--text)">Flashbots bundle</strong> — with 2+ wallets, all mint txs are packed into ONE atomic bundle that lands together in a single block (or not at all — zero gas wasted). Targets the next 4 blocks automatically. Requires <code>FLASHBOTS_AUTH_PRIVATE_KEY</code>.</div>
-    <div><strong style="color:var(--text)">Delegation batch</strong> — deploy your own RV3BatchMinter and mint a drop N times in one TX; sweep and withdraw when done.</div>
+    <div><strong style="color:var(--text)">Direct RPC</strong> — an approved signer may submit a reviewed request through your configured endpoints. RV3 never holds signing keys.</div>
+    <div><strong style="color:var(--text)">Flashbots Protect</strong> — available only after a signer-compatible private relay integration is selected and tested.</div>
+    <div><strong style="color:var(--text)">Flashbots bundle</strong> — disabled until it can be implemented without an RV3-held signing key.</div>
+    <div><strong style="color:var(--text)">Delegation batch</strong> — requires a separately reviewed contract deployment and external-signer approval.</div>
   </div>
 </div>
 
@@ -2946,7 +2931,7 @@ ${RV3_Auth.isAdmin() ? `
 <div class="card">
   <div class="card-hd"><h2>🔐 Security</h2></div>
   <div class="card-body" style="font-size:12px;line-height:1.9;color:var(--text2)">
-    <div>· Private keys never stored — only address hints saved in session</div>
+    <div>· Private keys never accepted — only public external-signer addresses are stored</div>
     <div>· API keys stay in .env on the server — never in browser storage</div>
     <div>· Mint execution runs via the local Node worker (npm start)</div>
     <div>· Input sanitization on all user-supplied values</div>
@@ -2955,12 +2940,11 @@ ${RV3_Auth.isAdmin() ? `
     <div>· Max spend cap enforced at preflight — transaction blocked if exceeded</div>
   </div>
 </div>`;
+  setTimeout(() => refreshWalletConnectStatus(), 0);
   setTimeout(() => loadAuthorizedUsers(), 100);
 }
 
 async function apiReconnect() {
-  const tok = document.getElementById('s-apitoken')?.value?.trim();
-  if (tok) RV3_API.setToken(tok);
   const ok = await apiConnect();
   if (ok) {
     await syncEnvRpcs();
@@ -2971,6 +2955,64 @@ async function apiReconnect() {
   }
   if (document.getElementById('nav-settings')?.classList.contains('act')) go('settings');
   updateSystemStatus();
+}
+
+function renderWalletConnectStatus(status) {
+  const badge = document.getElementById('wc-badge');
+  const state = document.getElementById('wc-state');
+  const pair = document.getElementById('wc-pair-btn');
+  if (!badge || !state || !pair) return;
+  if (!status.configured) {
+    badge.className = 'st st-pend'; badge.textContent = 'NOT SET';
+    state.textContent = 'Set WALLETCONNECT_PROJECT_ID in the server environment, then restart RV3.';
+    pair.disabled = true;
+    return;
+  }
+  pair.disabled = false;
+  if (status.connected) {
+    badge.className = 'st st-ok'; badge.textContent = 'PAIRED';
+    state.textContent = 'An approved external wallet session is connected. Every transaction still requires confirmation in the wallet.';
+  } else if (status.pairingPending) {
+    badge.className = 'st st-pend'; badge.textContent = 'PAIRING';
+    state.textContent = 'Waiting for the wallet to approve the pairing request.';
+  } else {
+    badge.className = 'st st-pend'; badge.textContent = 'READY';
+    state.textContent = 'Ready to pair an operator-controlled WalletConnect wallet for reviewed Ethereum and Robinhood requests.';
+  }
+  if (status.lastError) state.textContent = `Wallet connection issue: ${status.lastError}`;
+}
+
+async function refreshWalletConnectStatus() {
+  if (!API_ONLINE) return;
+  try { renderWalletConnectStatus(await RV3_API.walletConnectStatus()); }
+  catch { renderWalletConnectStatus({ configured: false }); }
+}
+
+async function beginWalletConnectPairing() {
+  if (!API_ONLINE) { toast('Backend offline — start RV3 before pairing','⚠'); return; }
+  const button = document.getElementById('wc-pair-btn');
+  if (button) button.disabled = true;
+  const pairing = document.getElementById('wc-pair-link');
+  if (pairing) pairing.textContent = '';
+  try {
+    const result = await RV3_API.walletConnectPair();
+    await refreshWalletConnectStatus();
+    if (result.connected) { toast('Operator wallet is already paired','✓'); return; }
+    if (!result.uri) throw new Error('Pairing link was not supplied by WalletConnect.');
+    if (pairing) {
+      const hint = document.createElement('span');
+      hint.textContent = 'Open this temporary pairing request in your WalletConnect-compatible wallet: ';
+      const link = document.createElement('a');
+      link.href = result.uri; link.textContent = 'Open wallet pairing';
+      link.style.color = 'var(--accent3)'; link.style.fontWeight = '600';
+      pairing.replaceChildren(hint, link);
+    }
+    toast('Pairing request created — approve it in your wallet','✓');
+  } catch (e) {
+    toast(e.message || 'Wallet pairing could not start','⚠');
+  } finally {
+    await refreshWalletConnectStatus();
+  }
 }
 
 async function handleLogout() {
@@ -2992,7 +3034,7 @@ async function loadAuthorizedUsers() {
   if (!RV3_Auth.isAdmin() || !API_ONLINE) return;
   try {
     const res = await fetch('/auth/users', {
-      headers: { 'X-Auth-Token': RV3_Auth.getToken() },
+      credentials: 'same-origin',
     });
     if (!res.ok) return;
     const data = await res.json();
@@ -3018,8 +3060,8 @@ async function authorizeNewUser() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Auth-Token': RV3_Auth.getToken(),
       },
+      credentials: 'same-origin',
       body: JSON.stringify({ email, isAdmin: false }),
     });
     const data = await res.json();
@@ -3033,8 +3075,6 @@ async function authorizeNewUser() {
 }
 
 function settingsSave() {
-  const tok = document.getElementById('s-apitoken')?.value?.trim();
-  if (tok) RV3_API.setToken(tok);
   // Load admin data if on settings page
   if (RV3_Auth.isAdmin()) {
     setTimeout(() => loadAuthorizedUsers(), 100);
@@ -3045,10 +3085,6 @@ function settingsSave() {
   S.settings.defaultGasPreset = document.getElementById('s-defgas')?.value || 'normal';
   S.settings.rpcBlast = document.getElementById('s-blast')?.checked ?? true;
   S.settings.rpcPrewarm = document.getElementById('s-prewarm')?.checked ?? true;
-  const discord = document.getElementById('s-discord')?.value?.trim() || '';
-  S.settings.discordWebhook = discord && isHttpsUrl(discord) ? discord : '';
-  S.settings.telegramToken = document.getElementById('s-tgtoken')?.value || '';
-  S.settings.telegramChatId = document.getElementById('s-tgchat')?.value || '';
   S.settings.notifyMintRun = document.getElementById('s-n1')?.checked ?? true;
   S.settings.notifyFundTransfer = document.getElementById('s-n2')?.checked ?? true;
   S.settings.notifyLowBalance = document.getElementById('s-n3')?.checked ?? true;
@@ -3067,68 +3103,19 @@ function rpcRowHTML(r) {
     <span class="rpc-url">${esc(r.url)}</span>
     <span class="rpc-ms" style="${msColor}">${msLabel}</span>
     <span style="cursor:pointer;color:var(--text3);padding:2px 4px;font-size:12px" onclick="rpcPing('${esc(r.id)}')" title="Ping">◎</span>
-    <span style="cursor:pointer;color:var(--red);padding:2px 4px;font-size:12px" onclick="rpcDelete('${esc(r.id)}')" title="Remove">✕</span>
   </div>`;
-}
-
-function rpcAdd() {
-  document.getElementById('rpc-add-form').style.display = 'block';
-}
-
-function rpcSave() {
-  const name = document.getElementById('rpc-new-name')?.value?.trim();
-  const role = document.getElementById('rpc-new-role')?.value;
-  const url = document.getElementById('rpc-new-url')?.value?.trim();
-  if(!name) { toast('Enter a label','⚠'); return; }
-  if(!url || !isHttpsUrl(url)) { toast('Enter a valid HTTPS URL','⚠'); return; }
-  const chain = document.getElementById('rpc-new-chain')?.value || inferChainFromRpcUrl(url) || 'ethereum';
-  const id = 'rpc_' + Date.now();
-  S.rpcs.push({ id, name, role, url, chain, ms: null, active: true });
-  saveState(); updateBadges();
-  document.getElementById('rpc-add-form').style.display = 'none';
-  document.getElementById('rpc-new-name').value = '';
-  document.getElementById('rpc-new-url').value = '';
-  toast(`RPC "${name}" added`,'✓');
-  document.getElementById('rpc-list').innerHTML = S.rpcs.map(r=>rpcRowHTML(r)).join('');
-  rpcPing(id);
-}
-
-function rpcDelete(id) {
-  S.rpcs = S.rpcs.filter(r=>r.id!==id);
-  saveState(); updateBadges();
-  const list = document.getElementById('rpc-list');
-  if(list) list.innerHTML = S.rpcs.length ? S.rpcs.map(r=>rpcRowHTML(r)).join('') : '<div class="ban ban-w" style="margin:0"><div class="ban-ico">⚠</div><div class="ban-txt">No RPC endpoints added</div></div>';
-  toast('RPC removed','ℹ');
 }
 
 async function rpcPing(id) {
   const rpcEntry = S.rpcs.find(r=>r.id===id);
   if(!rpcEntry) return;
-  const url = rpcEntry.urlFull || rpcEntry.url;
-  const isEnv = rpcEntry.fromEnv || String(id).startsWith('env_');
-  if (!isEnv && !url.startsWith('https://')) { toast('Full HTTPS URL required to ping','⚠'); return; }
   // Show pinging state immediately
   rpcEntry.pinging = true; rpcEntry.err = false;
   const list = document.getElementById('rpc-list');
   if(list) list.innerHTML = S.rpcs.map(r=>rpcRowHTML(r)).join('');
   try {
-    let ms;
-    if (API_ONLINE) {
-      const pingUrl = isEnv ? (rpcEntry.urlFull || null) : url;
-      const r = await RV3_API.pingRpc(pingUrl, isEnv ? id : null);
-      ms = r.ms;
-    } else {
-      const start = Date.now();
-      const res = await fetch(url, {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({jsonrpc:'2.0',method:'eth_blockNumber',params:[],id:1}),
-        signal: AbortSignal.timeout(8000)
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      if (data.error) throw new Error(data.error.message || 'RPC error');
-      ms = Date.now() - start;
-    }
+    if (!API_ONLINE) throw new Error('Backend is offline');
+    const { ms } = await RV3_API.pingRpc(id);
     rpcEntry.ms = ms; rpcEntry.pinging = false; rpcEntry.err = false;
     saveState();
     if(list) list.innerHTML = S.rpcs.map(r=>rpcRowHTML(r)).join('');
@@ -3487,7 +3474,7 @@ async function mSubmit() {
     rpcBlast: S.settings.rpcBlast !== false,
     rpcPrewarm: S.settings.rpcPrewarm !== false,
     rpcCount: S.rpcs.length,
-    rpcUrls: rpcUrlsForChain(drop.chainSlug || 'ethereum'),
+    rpcUrls: [],
   };
   try {
     if (API_ONLINE) {
@@ -3833,7 +3820,7 @@ function fundNext() {
 function fundExecute() {
   const srcWallets = S.wallets.filter(w=>FUND_STATE.sources.includes(w.id));
   const hub = FUND_STATE.hub;
-  const rpcUrls = S.rpcs.map(r => r.urlFull || r.url).filter(u => u.startsWith('https://'));
+  const rpcUrls = [];
   const body = {
     op: FUND_STATE.op,
     hubId: hub,
@@ -3998,7 +3985,7 @@ function sweepExecute() {
     collection: contractFilter,
     chain: (SWEEP_STATE.chain || 'ethereum').toLowerCase(),
     gasPreset: 'normal',
-    rpcUrls: S.rpcs.map(r => r.urlFull || r.url).filter(u => u.startsWith('https://')),
+    rpcUrls: [],
   };
   if (API_ONLINE) {
     RV3_API.createSweepOp(body).then(() => {
@@ -4019,7 +4006,7 @@ const CHANGELOG = [
   {
     ver:'v2.6.0', date:'Aug 13 2026', isNew:true,
     items:[
-      {tag:'new', text:'Preflight page — gate every armed task (slug, chain RPC, simulation, pre-sign) before Fire, with one-click Preflight all'},
+      {tag:'new', text:'Preflight page — gate every armed task by collection data, approved RPCs, readiness, and policy before external-signer approval'},
       {tag:'new', text:'Command success rate, live execution log, and pipeline Preflight step that jumps to the gate check'},
       {tag:'fix', text:'Pre-warm respects retry wallets and reports per-wallet warm/fail so a partial retry is actually ready'},
     ]
@@ -4223,26 +4210,26 @@ function renderGuide() {
       icon: '⚡',
       title: 'Quick Start',
       body: `
-<div class="guide-step"><div class="guide-step-num">1</div><div class="guide-step-body"><div class="guide-step-title">Add RPC endpoints</div><div class="guide-step-desc">Settings → RPC Endpoints. Add your Alchemy, QuickNode, or dRPC HTTPS URLs. RV3 signs once and blasts to all endpoints simultaneously — first confirmation wins.</div></div></div>
-<div class="guide-step"><div class="guide-step-num">2</div><div class="guide-step-body"><div class="guide-step-title">Import wallets</div><div class="guide-step-desc">Wallets → Import. Paste a label and private key. Keys are encrypted server-side and never stored in the browser. Set a low-balance threshold in Settings.</div></div></div>
+<div class="guide-step"><div class="guide-step-num">1</div><div class="guide-step-body"><div class="guide-step-title">Add approved RPC endpoints</div><div class="guide-step-desc">Settings → RPC Endpoints. Add reliable provider HTTPS URLs for read checks, simulations, and preflight. Public RPCs are fallbacks, not a production execution path.</div></div></div>
+<div class="guide-step"><div class="guide-step-num">2</div><div class="guide-step-body"><div class="guide-step-title">Add external signer</div><div class="guide-step-desc">Wallets → Add external signer. Save only a public address; approve every transaction in your external signer.</div></div></div>
 <div class="guide-step"><div class="guide-step-num">3</div><div class="guide-step-body"><div class="guide-step-title">Detect a contract</div><div class="guide-step-desc">Detector → paste a contract address or collection URL from OpenSea, Magic Eden, Blur, Manifold, or Thirdweb. RV3 reads the standard, phases, price, and wallet eligibility.</div></div></div>
-<div class="guide-step"><div class="guide-step-num">4</div><div class="guide-step-body"><div class="guide-step-title">Create a mint task</div><div class="guide-step-desc">Add the detected drop to Drops, then click Mint. Select phase, wallets, gas preset, and route. RV3 simulates the transaction before broadcast — if it would revert, no gas is spent.</div></div></div>
-<div class="guide-step"><div class="guide-step-num">5</div><div class="guide-step-body"><div class="guide-step-title">Monitor execution</div><div class="guide-step-desc">Tasks appear in the Tasks page with live status. Confirmation speed (ms) is displayed after each run. The sidebar notification panel logs results in real time.</div></div></div>`
+<div class="guide-step"><div class="guide-step-num">4</div><div class="guide-step-body"><div class="guide-step-title">Create and preflight a mint task</div><div class="guide-step-desc">Add the detected drop to Drops, then click Mint. Select the phase and an allowed route. RV3 checks collection data, RPCs, wallet readiness, and scheduling without signing or broadcasting.</div></div></div>
+<div class="guide-step"><div class="guide-step-num">5</div><div class="guide-step-body"><div class="guide-step-title">Approve in the external signer</div><div class="guide-step-desc">A live request must satisfy the configured allowlist, spend caps, durable approval, and external signer confirmation. Tasks and notifications show the resulting state.</div></div></div>`
     },
     {
       icon: '⧉',
       title: 'Copy Mint',
       body: `<h4>What it does</h4>
-<p>Copy Mint watches one or more target wallets on-chain. The moment a target mints an NFT, RV3 reads their exact mint transaction and replays the same calldata from <strong>your</strong> wallets — landing in the same or next block.</p>
+<p>Copy Mint is a restricted observer for verified public free mints. It records an eligible public observation and creates a normal RV3 preflight task for review; it never replays calldata, signs, broadcasts, or bypasses project rules.</p>
 <h4>Setup</h4>
 <ul>
-  <li><strong>Target address</strong> — the wallet you want to shadow (a known alpha/whale minter).</li>
-  <li><strong>Chain</strong> — Ethereum, Base, Blast, Polygon, or Robinhood Chain. Requires the matching RPC in env (Robinhood falls back to its public endpoint automatically).</li>
-  <li><strong>Wallets</strong> — pick which of your imported wallets fire the copy (leave empty to use the first).</li>
-  <li><strong>Max mint value</strong> — optional per-mint ETH cap so you never blindly copy an expensive buy.</li>
+  <li><strong>Target address</strong> — an optional public address used only as an observation source.</li>
+  <li><strong>Chain</strong> — Ethereum or Robinhood Chain only.</li>
+  <li><strong>Eligibility</strong> — RV3 accepts only verified public observations with a zero mint price.</li>
+  <li><strong>Result</strong> — a queued preflight task that still requires the normal policy and external-signer flow.</li>
 </ul>
 <h4>Recipient note</h4>
-<p>Most mints (<code>mint(qty)</code>, SeaDrop <code>mintPublic</code>) send the NFT to <code>msg.sender</code>, so the copy lands on your wallet. If a contract hardcodes the recipient in calldata, RV3 flags a <strong>recipient risk</strong> in the feed. Enable <code>ENABLE_LIVE_MINT=true</code> to actually send copies — otherwise detections are logged in preflight-only mode.</p>`
+<p>RV3 does not copy a target’s transaction, recipient, calldata, allowlist, or wallet limits. An observation is context only; eligibility and project terms still control whether a separate reviewed request may be made.</p>`
     },
     {
       icon: '◎',
@@ -4265,7 +4252,7 @@ function renderGuide() {
       icon: '◫',
       title: 'Wallets',
       body: `<h4>Importing</h4>
-<p>Wallets → Import. Enter a label and private key. The key is encrypted with <code>WALLET_ENCRYPTION_KEY</code> and stored server-side. Only the address is ever shown in the browser.</p>
+<p>Wallets → Add external signer. Enter a label and public address. RV3 never accepts, stores, or transmits signing material; signing happens in the approved external signer.</p>
 <h4>Balance alerts</h4>
 <p>Set a threshold in Settings (e.g. 0.01 ETH). Wallets below it appear with an amber indicator and trigger a notification. Refresh balances any time from the Wallets page.</p>
 <h4>Fund Wallets</h4>
@@ -4283,7 +4270,7 @@ function renderGuide() {
       body: `<h4>Task creation</h4>
 <p>Select a drop and phase, choose wallets, set quantity per wallet, pick a gas preset, and choose an inclusion route. The cost calculator shows ETH and USD totals before you confirm.</p>
 <h4>Transaction simulation</h4>
-<p>Before broadcasting, RV3 runs <code>eth_call</code> against your RPC. If the contract would revert, the error reason is shown and no gas is spent. This protects against minting into a closed phase, a full collection, or an ineligible wallet.</p>
+<p>RV3 can run read-only checks against approved RPCs before a request is reviewed. A preflight failure is surfaced to the operator and does not create a signature or broadcast.</p>
 <h4>Gas presets</h4>
 <ul>
   <li><strong>Slow</strong> — 3 gwei. Low-congestion mints with no time pressure.</li>
@@ -4295,21 +4282,21 @@ function renderGuide() {
 <h4>Live gas display</h4>
 <p>The topbar shows the current network gas price in gwei and the estimated USD cost per mint transaction, updated every 5 seconds from your primary RPC.</p>
 <h4>Auto-scheduler</h4>
-<p>Enable <strong>Auto-schedule to phase start</strong> in the task modal. RV3 reads the phase open timestamp and fires the task at T-1ms. A live countdown with millisecond precision runs in the modal and on the Tasks page.</p>
-<h4>RPC blast</h4>
-<p>Enabled by default. The transaction is signed once and broadcast to every configured endpoint at the same instant. First confirmation wins. Adding more endpoints increases the probability of landing in a competitive block.</p>
+<p>Enable <strong>Auto-schedule to phase start</strong> in the task modal. RV3 tracks the phase open timestamp and prepares the task for operator review. Any live request still needs the configured policy and an external signer approval.</p>
+<h4>RPC readiness</h4>
+<p>RV3 checks approved RPC availability and latency before review. For production, use provider-owned endpoints with clear rate limits; public endpoints are read-only fallbacks.</p>
 <h4>Inclusion routes</h4>
 <ul>
   <li><strong>Direct RPC</strong> — Blast to all endpoints. Fastest for most mints.</li>
   <li><strong>Public mempool</strong> — Standard broadcast. No privacy.</li>
-  <li><strong>Flashbots Protect</strong> — Private relay via <code>ETH_RPC_PRIVATE</code>. Sandwich-resistant.</li>
-  <li><strong>Flashbots bundle</strong> — With 2+ wallets: atomic multi-wallet bundle — every wallet mints in the same block or nothing lands (no partial fills, no wasted gas). Auto-targets the next 4 blocks. Requires <code>FLASHBOTS_AUTH_PRIVATE_KEY</code>.</li>
-  <li><strong>Delegation batch</strong> — Deploy your own RV3BatchMinter contract, then one transaction mints the drop N times (batchMint), NFTs land in the contract, and one-click Sweep/Withdraw pull them out. Open the Delegation page.</li>
+  <li><strong>Flashbots Protect</strong> — requires a reviewed signer-compatible relay integration; it is not enabled by default.</li>
+  <li><strong>Flashbots bundle</strong> — unavailable until it can be implemented without storing a signing key in RV3.</li>
+  <li><strong>Delegation batch</strong> — requires a separately reviewed contract deployment, an exact allowlist, and external-signer approval.</li>
 </ul>
 <h4>Mint speed</h4>
 <p>Confirmation time in milliseconds is tracked per transaction and averaged across wallets in each run. Visible on Command, War room, Tasks, and History. Tx links open the explorer for that drop’s chain (Etherscan, Basescan, Blastscan, Polygonscan, or Robinhood Blockscout).</p>
-<h4>Command → Preflight → War room</h4>
-<p>Arm a task from Detect or Drops. Command shows fleet readiness and success rate per chain. Open <strong>Preflight</strong> to simulate and pre-sign every armed wallet, then Fire jumps to War room for live per-wallet results. Failed rows Retry (failed wallets only) or Skip.</p>`
+<h4>Command → Preflight → Approval</h4>
+<p>Create a task from Detect or Drops. Command highlights fleet readiness and missing gates by chain. Open <strong>Preflight</strong> to check readiness, then request approval through the configured external signer. Failed rows can be reviewed, retried, skipped, or archived without bypassing controls.</p>`
     },
     {
       icon: '⬡',
@@ -4358,7 +4345,7 @@ function renderGuide() {
       icon: '◻',
       title: 'Security',
       body: `<h4>Key handling</h4>
-<p>Private keys are encrypted with AES-256 using <code>WALLET_ENCRYPTION_KEY</code> and stored server-side only. The browser never receives a raw key. Always use dedicated minting wallets, never your main wallet.</p>
+<p>RV3 never accepts, stores, or transmits signing material. Use a dedicated external signer and approve each transaction only after reviewing the chain, target, amount, and fee limits.</p>
 <h4>Auth</h4>
 <p>Sessions are stored in Neon PostgreSQL (production) or a local JSON file (development). Passwords are hashed with SHA-256 + API secret. Sessions expire after 7 days and are purged on logout.</p>
 <h4>Protections</h4>
@@ -4375,7 +4362,7 @@ function renderGuide() {
 <h4>Best practices</h4>
 <ul>
   <li>Never share your RV3 URL with anyone</li>
-  <li>Set a strong <code>API_SECRET</code> and <code>WALLET_ENCRYPTION_KEY</code> in production</li>
+  <li>Use a strong server secret and configure an approved external signer before live execution</li>
   <li>Set a max spend cap before each session</li>
   <li>Use a dedicated minting wallet, not a wallet that holds long-term assets</li>
 </ul>`
@@ -4388,7 +4375,7 @@ function renderGuide() {
   <li><code>API_SECRET</code> — Password salt and API auth token. Must match across all environments.</li>
   <li><code>DATABASE_URL</code> — Neon PostgreSQL connection string. Required on Vercel for persistent auth.</li>
   <li><code>ETH_RPC_PRIMARY</code> — Primary RPC endpoint (Alchemy, QuickNode, etc.). Required to execute transactions.</li>
-  <li><code>WALLET_ENCRYPTION_KEY</code> — 64-character hex string. Used to encrypt private keys at rest.</li>
+  <li><code>RV3_EXTERNAL_SIGNER_PROVIDER</code> — identifies the approved external signer integration required for live execution.</li>
 </ul>
 <h4>Optional</h4>
 <ul>

@@ -15,13 +15,37 @@ const walletStore = require('./wallets');
 const prewarm = require('./prewarm');
 const copymint = require('./copymint');
 const taskStore = require('./taskStore');
+const workerLease = require('./workerLease');
 
 let running = false;
 let state = store.load();
+const runtime = { startedAt: null, lastTickAt: null, lastTickError: null, lastBalanceRefreshAt: null, lease: null };
 
 function getState() { return state; }
 function setState(s) { state = s; }
 function save() { store.save(state); }
+
+async function queueCopyPreflight(input) {
+  const task = {
+    id: `task_${Date.now()}`,
+    drop: input.drop,
+    name: `Free mint watch · ${input.drop}`,
+    openseaSlug: input.openseaSlug,
+    contractAddress: input.contractAddress,
+    chainSlug: input.chainSlug,
+    route: 'DIRECT_RPC', wallets: input.wallets, qty: 1,
+    status: 'queued', gasPreset: 'normal', gasGwei: 7,
+    rpcBlast: false, rpcPrewarm: true, createdAt: new Date().toISOString(),
+    executionApproved: false, copyMint: input.copyMint,
+    events: [{ at: new Date().toISOString(), type: 'copy_mint_preflight_queued', detail: 'Free public mint observation; no transaction approval.' }],
+  };
+  state.tasks = state.tasks || [];
+  state.tasks.unshift(task);
+  store.appendLog(state, 'info', `Copy-mint preflight queued: ${task.name}`);
+  save();
+  taskStore.saveTask(task).catch(() => {});
+  return task;
+}
 
 async function refreshWalletBalances() {
   const urls = rpc.allRpcUrls();
@@ -35,6 +59,7 @@ async function refreshWalletBalances() {
       await walletStore.updateBalance(w.id, w.eth);
     } catch { /* keep last */ }
   }));
+  runtime.lastBalanceRefreshAt = new Date().toISOString();
 }
 
 function parseScheduleTime(task) {
@@ -44,7 +69,13 @@ function parseScheduleTime(task) {
   return isNaN(t) ? 0 : t;
 }
 
-function isTaskReady(task) {
+async function isTaskReady(task) {
+  if (task.targetBlock) {
+    const urls = rpc.allRpcUrls(task.rpcUrls || [], task.chainSlug || 'ethereum');
+    if (!urls.length) return false;
+    try { return (await rpc.getBlockNumber(await rpc.getFastestUrl(urls))) >= task.targetBlock; }
+    catch { return false; }
+  }
   const at = parseScheduleTime(task);
   if (!at) return true;
   return Date.now() >= at - 1;
@@ -69,8 +100,11 @@ async function prewarmPending() {
   }
 }
 
-function pickNextQueued(priorityId) {
-  const mintTasks = state.tasks.filter(t => t.status === 'queued' && isTaskReady(t));
+async function pickNextQueued(priorityId) {
+  const mintTasks = [];
+  for (const task of state.tasks) {
+    if (task.status === 'queued' && await isTaskReady(task)) mintTasks.push(task);
+  }
   let mintTask = priorityId ? mintTasks.find(t => t.id === priorityId) : null;
   if (!mintTask) mintTask = mintTasks.find(t => t.priority) || mintTasks[0];
   if (mintTask) return { type: 'mint', item: mintTask };
@@ -89,6 +123,20 @@ async function finishRun(entry) {
 async function processMintTask(task) {
   const log = (level, message) => store.appendLog(state, level, `[mint:${task.id}] ${message}`);
 
+  if (config.enableLiveMint && task.executionApproved !== true) {
+    task.status = 'failed';
+    task.error = 'Explicit operator confirmation is required before a live execution attempt.';
+    task.finishedAt = new Date().toISOString();
+    save();
+    return;
+  }
+  if (config.enableLiveMint) {
+    task.status = 'failed';
+    task.error = 'Live tasks must enter through the policy-checked request endpoint; background execution is disabled.';
+    task.finishedAt = new Date().toISOString();
+    save();
+    return;
+  }
   task.status = 'running';
   task.startedAt = new Date().toISOString();
   save();
@@ -251,13 +299,19 @@ async function tick(priorityId) {
 
   if (running) return;
   running = true;
+  runtime.lastTickAt = new Date().toISOString();
   try {
-    const next = pickNextQueued(priorityId);
+    if (config.env === 'production') {
+      runtime.lease = await workerLease.acquire();
+      if (!runtime.lease.acquired) return;
+    }
+    const next = await pickNextQueued(priorityId);
     if (!next) return;
     if (next.type === 'mint') await processMintTask(next.item);
     else if (next.type === 'fund') await processFundOp(next.item);
     else if (next.type === 'sweep') await processSweepOp(next.item);
   } catch (e) {
+    runtime.lastTickError = e.message;
     store.appendLog(state, 'err', `Worker: ${e.message}`);
     save();
   } finally {
@@ -287,10 +341,17 @@ async function start() {
   }
   setInterval(tick, config.workerTickMs || 200);
   setInterval(() => { refreshWalletBalances().catch(() => {}); }, 60000);
-  // Copy Mint watcher — self-manages its own scan interval based on active targets.
+  copymint.setTaskSink(queueCopyPreflight);
+  // Copy-mint watcher only queues free/public preflight tasks; it cannot sign or broadcast.
   copymint.start().catch(e => store.appendLog(state, 'err', `copymint.start: ${e.message}`));
+  runtime.startedAt = new Date().toISOString();
   store.appendLog(state, 'info', 'RV3 worker started (mint · fund · sweep · copymint)');
   save();
 }
 
-module.exports = { start, tick, runNow, getState, setState, save, refreshWalletBalances };
+function getStatus() {
+  const queued = (state.tasks || []).filter(t => t.status === 'queued').length;
+  return { running, queuedTasks: queued, startedAt: runtime.startedAt, lastTickAt: runtime.lastTickAt, lastTickError: runtime.lastTickError, lastBalanceRefreshAt: runtime.lastBalanceRefreshAt, liveExecution: config.enableLiveMint, lease: runtime.lease };
+}
+
+module.exports = { start, tick, runNow, getState, setState, save, refreshWalletBalances, queueCopyPreflight, getStatus };

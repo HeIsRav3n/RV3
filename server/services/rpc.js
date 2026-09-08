@@ -231,8 +231,12 @@ function getPrivateRpc(chainSlug = 'ethereum') {
 function allRpcUrls(extra = [], chainSlug = 'ethereum') {
   const chain = normalizeChain(chainSlug);
   const urls = new Set();
+  const approved = new Set();
   for (const r of config.envRpcs) {
-    if (r.chain === chain) urls.add(r.url);
+    if (r.chain === chain) {
+      urls.add(r.url);
+      approved.add(r.url);
+    }
   }
   if (!urls.size) {
     // Chain-specific public fallback only. Never borrow another chain's RPC —
@@ -242,11 +246,9 @@ function allRpcUrls(extra = [], chainSlug = 'ethereum') {
   }
   for (const r of extra) {
     const url = typeof r === 'string' ? r : r?.url;
-    if (!url?.startsWith('https://')) continue;
-    const extraChain = inferUrlChain(url);
-    if (extraChain && extraChain !== chain) continue;
-    if (!extraChain && chain !== 'ethereum') continue;
-    urls.add(url);
+    // Task payloads and query strings are untrusted. Only endpoints defined
+    // in server configuration may ever be contacted by RV3.
+    if (approved.has(url)) urls.add(url);
   }
   return [...urls];
 }

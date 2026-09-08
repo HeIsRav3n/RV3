@@ -12,7 +12,6 @@ const notify = require('../services/notify');
 const worker = require('../services/worker');
 const pnl = require('../services/pnl');
 const tx = require('../services/tx');
-const { encrypt, addressFromKey } = require('../services/crypto');
 const walletStore = require('../services/wallets');
 const prewarm = require('../services/prewarm');
 const taskStore = require('../services/taskStore');
@@ -22,6 +21,12 @@ const receipt = require('../services/receipt');
 const gql = require('../services/gql');
 const copymint = require('../services/copymint');
 const delegation = require('../services/delegation');
+const productionPolicy = require('../services/productionPolicy');
+const policyStore = require('../services/policyStore');
+const theGraph = require('../services/theGraph');
+const readiness = require('../services/readiness');
+const db = require('../db');
+const walletConnectSigner = require('../services/walletConnectSigner');
 
 const router = express.Router();
 
@@ -32,6 +37,12 @@ const taskLimiter = rateLimit({
 });
 
 function state() { return worker.getState(); }
+
+function appendTaskEvent(task, type, detail) {
+  task.events = Array.isArray(task.events) ? task.events : [];
+  task.events.push({ at: new Date().toISOString(), type, detail: String(detail || '').slice(0, 300) });
+  task.events = task.events.slice(-100);
+}
 
 router.get('/health', (req, res) => {
   const s = state();
@@ -52,8 +63,13 @@ router.get('/health', (req, res) => {
       builders: config.builderRpcs.length,
       discord: !!config.discordWebhook,
       telegram: !!(config.telegramToken && config.telegramChatId),
-      walletEncryption: config.hasWalletEncryption,
+      signerProvider: walletConnectSigner.status().connected,
       liveMint: config.enableLiveMint,
+      database: db.useDatabase(),
+      eventProvider: !!config.eventProvider,
+      theGraphEthereum: !!theGraph.endpoint('ethereum'),
+      theGraphRobinhood: !!theGraph.endpoint('robinhood'),
+      walletConnect: walletConnectSigner.configured(),
     },
     version: require('../../package.json').version,
   });
@@ -67,11 +83,16 @@ router.get('/settings/status', (req, res) => {
       blur: { configured: !!config.blurApiKey, label: 'Blur API' },
       rpc: { configured: config.envRpcs.length > 0, count: config.envRpcs.length, label: 'Env RPC endpoints' },
       builders: { configured: config.builderRpcs.length, count: config.builderRpcs.length, label: 'Builder endpoints' },
-      flashbots: { configured: !!config.flashbotsAuthKey, label: 'Flashbots auth key' },
+      flashbots: { configured: false, label: 'Flashbots signing disabled' },
       discord: { configured: !!config.discordWebhook, label: 'Discord webhook' },
       telegram: { configured: !!(config.telegramToken && config.telegramChatId), label: 'Telegram bot' },
-      walletEncryption: { configured: config.hasWalletEncryption, label: 'Wallet encryption' },
+      signerProvider: { configured: walletConnectSigner.status().connected, label: 'External signer provider' },
       liveMint: { enabled: config.enableLiveMint, label: 'Live mint execution' },
+      database: { configured: db.useDatabase(), label: 'Durable PostgreSQL policy store' },
+      eventProvider: { configured: !!config.eventProvider, label: 'Read-only event provider' },
+      theGraphEthereum: { configured: !!theGraph.endpoint('ethereum'), label: 'The Graph · Ethereum' },
+      theGraphRobinhood: { configured: !!theGraph.endpoint('robinhood'), label: 'The Graph · Robinhood Chain' },
+      walletConnect: { configured: walletConnectSigner.configured(), label: 'WalletConnect external signer' },
     },
   });
 });
@@ -154,7 +175,6 @@ router.get('/rpc/env', (req, res) => {
       role: r.role,
       chain: r.chain || 'ethereum',
       url: rpc.maskUrl(r.url),
-      urlFull: r.url,
       fromEnv: true,
     })),
   });
@@ -163,19 +183,10 @@ router.get('/rpc/env', (req, res) => {
 router.post('/rpc/ping', async (req, res) => {
   try {
     const id = String(req.body?.id || '').trim();
-    const fallbackUrl = String(req.body?.url || '').trim();
-
-    if (id) {
-      const envRpc = config.envRpcs.find(r => r.id === id);
-      const pingUrl = envRpc?.url || (fallbackUrl.startsWith('https://') ? fallbackUrl : null);
-      if (!pingUrl) return res.status(404).json({ error: 'RPC not found — set ETH_RPC_PRIMARY in env vars' });
-      const ms = await rpc.ping(pingUrl);
-      return res.json({ ms, ok: true });
-    }
-
-    const url = fallbackUrl;
-    if (!url.startsWith('https://')) return res.status(400).json({ error: 'HTTPS URL required' });
-    const ms = await rpc.ping(url);
+    if (!id) return res.status(400).json({ error: 'Configured RPC ID required.' });
+    const envRpc = config.envRpcs.find(r => r.id === id);
+    if (!envRpc) return res.status(404).json({ error: 'Configured RPC not found.' });
+    const ms = await rpc.ping(envRpc.url);
     res.json({ ms, ok: true });
   } catch (e) {
     res.status(502).json({ error: e.message, ok: false });
@@ -184,6 +195,9 @@ router.post('/rpc/ping', async (req, res) => {
 
 router.get('/diag/opensea', async (req, res) => {
   try {
+    if (!config.openseaGraphqlEnabled) {
+      return res.json({ graphql: 'disabled', recommendation: 'Use OpenSea REST v2 diagnostics and rate-limit headers.' });
+    }
     const n = Math.min(Math.max(parseInt(req.query.n || '5', 10), 1), 20);
     const stats = await gql.probeStats(n);
     res.json(stats);
@@ -201,7 +215,7 @@ router.get('/wallets', async (req, res) => {
       wallets: wallets.map(w => ({
         id: w.id, name: w.name, addr: w.addr, address: w.address,
         eth: w.eth || 0, chain: w.chain || 'ETH', low: !!w.low,
-        hasKey: !!w.encryptedKey,
+        signerType: w.signerType || 'external',
       })),
     });
   } catch (e) {
@@ -254,39 +268,91 @@ router.post('/wallets/balances', async (req, res) => {
   }
 });
 
-router.post('/wallets/preview', async (req, res) => {
+router.post('/wallets/preview', (req, res) => {
+  res.status(410).json({ error: 'Private-key preview is permanently disabled. Add a watch-only external signer address instead.' });
+});
+
+router.get('/signer/walletconnect/status', (req, res) => {
+  res.json(walletConnectSigner.status());
+});
+
+router.post('/signer/walletconnect/pair', async (req, res) => {
+  try { res.json(await walletConnectSigner.beginPairing()); }
+  catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+router.get('/worker/status', (req, res) => {
+  res.json({ worker: worker.getStatus(), copyMint: copymint.getStatus(), liveReadiness: {
+      signerConfigured: walletConnectSigner.status().connected,
+      eventProviderConfigured: !!config.eventProvider,
+    durableDatabaseConfigured: !!process.env.DATABASE_URL,
+    liveExecutionEnabled: config.enableLiveMint,
+    message: 'Live execution remains blocked until a selected external signer and durable policy store are configured.',
+  } });
+});
+
+router.get('/opensea/status', async (req, res) => {
+  if (!config.openseaApiKey) return res.json({ configured: false, rest: 'unavailable', graphql: config.openseaGraphqlEnabled ? 'diagnostic-only' : 'disabled' });
   try {
-    let key = String(req.body?.privateKey || '').trim();
-    if (!key) return res.status(400).json({ error: 'privateKey required' });
-    if (!key.startsWith('0x')) key = `0x${key}`;
-    const address = addressFromKey(key);
-    if (!address) return res.status(400).json({ error: 'Invalid private key' });
-    const urls = rpc.allRpcUrls();
-    let eth = 0;
-    if (urls.length) {
-      try { eth = await rpc.getBalance(urls[0], address); } catch { /* balance optional */ }
-    }
-    res.json({ address, eth });
+    const chains = await opensea.getSupportedChains();
+    res.json({ configured: true, rest: 'ok', graphql: config.openseaGraphqlEnabled ? 'diagnostic-only' : 'disabled', chains: chains.map(c => c.identifier || c.chain || c.name).filter(Boolean) });
   } catch (e) {
-    res.status(400).json({ error: e.message });
+    res.status(502).json({ configured: true, rest: 'unavailable', error: e.message });
   }
+});
+
+router.get('/thegraph/status', async (req, res) => {
+  const chains = ['ethereum', 'robinhood'];
+  const checks = await Promise.all(chains.map(async chain => {
+    try { return await theGraph.health(chain); }
+    catch { return { configured: true, chain, mode: 'unavailable' }; }
+  }));
+  res.json({ checks, role: 'indexed_read_model_only', realtime: 'Use approved RPC or event provider for FCFS triggering.' });
+});
+
+router.get('/portfolio', async (req, res) => {
+  try {
+    const wallets = await walletStore.loadWallets();
+    const chain = rpc.normalizeChain(req.query.chain || 'ethereum');
+    const urls = rpc.allRpcUrls([], chain);
+    if (!urls.length) return res.json({ chain, wallets: [], total: 0, fundingPlan: [] });
+    const url = await rpc.getFastestUrl(urls);
+    const balances = await Promise.all(wallets.map(async wallet => {
+      try { return { ...wallet, balance: await rpc.getBalance(url, wallet.address), available: true }; }
+      catch { return { ...wallet, balance: null, available: false }; }
+    }));
+    const total = balances.reduce((sum, w) => sum + (w.balance || 0), 0);
+    const minBalance = Math.min(Math.max(Number(req.query.minBalance || 0.02), 0), 1000);
+    const fundingPlan = balances.filter(w => w.balance != null && w.balance < minBalance)
+      .map(w => ({ walletId: w.id, address: w.address, shortfall: Math.max(0, minBalance - w.balance) }));
+    res.json({ chain, wallets: balances, total, minBalance, fundingPlan });
+  } catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+router.get('/networks', (req, res) => {
+  res.json({ networks: Object.entries(readiness.CHAINS).map(([slug, network]) => ({
+    slug, ...network, approvedRpcCount: rpc.allRpcUrls([], slug).length,
+  })) });
+});
+
+router.get('/rpc/health', async (req, res) => {
+  const chain = rpc.normalizeChain(req.query.chain || 'ethereum');
+  const urls = rpc.allRpcUrls([], chain);
+  const endpoints = await Promise.all(urls.map(async url => {
+    try { return { url: rpc.maskUrl(url), ok: true, ms: await rpc.ping(url) }; }
+    catch { return { url: rpc.maskUrl(url), ok: false, error: 'unavailable' }; }
+  }));
+  res.json({ chain, endpoints, healthy: endpoints.filter(r => r.ok).length });
 });
 
 router.post('/wallets/import', async (req, res) => {
   try {
     const name = String(req.body?.name || '').trim().slice(0, 80);
-    let key = String(req.body?.privateKey || '').trim();
     const bal = parseFloat(req.body?.balance) || 0;
+    const address = String(req.body?.address || '').trim();
     if (!name) return res.status(400).json({ error: 'name required' });
-    if (!key) return res.status(400).json({ error: 'privateKey required' });
-    if (!key.startsWith('0x')) key = `0x${key}`;
-    const address = addressFromKey(key);
-    if (!address) return res.status(400).json({ error: 'Invalid private key' });
-    if (!config.hasWalletEncryption) {
-      return res.status(400).json({
-        error: 'Set WALLET_ENCRYPTION_KEY in .env (64-char hex) before importing keys server-side',
-      });
-    }
+    if (req.body?.privateKey != null || req.body?.encryptedKey != null) return res.status(400).json({ error: 'Private keys are not accepted by RV3.' });
+    if (!/^0x[a-fA-F0-9]{40}$/.test(address)) return res.status(400).json({ error: 'A valid external signer address is required.' });
 
     const entry = {
       id: `w_${Date.now()}`,
@@ -297,7 +363,7 @@ router.post('/wallets/import', async (req, res) => {
       chain: 'ETH',
       low: bal < 0.01,
       nonce: 0,
-      encryptedKey: encrypt(key),
+      signerType: 'external',
       createdAt: new Date().toISOString(),
     };
 
@@ -366,6 +432,9 @@ async function resolveTask(id, bodyTask) {
 router.post('/tasks', taskLimiter, async (req, res) => {
   const body = req.body || {};
   const s = state();
+  let validated;
+  try { validated = readiness.validateTaskInput(body); }
+  catch (e) { return res.status(400).json({ error: e.message }); }
   const gasPreset = body.gasPreset || 'normal';
   let gasGwei = tx.GAS_PRESETS[gasPreset] || 25;
   if (gasPreset === 'custom') gasGwei = Math.min(Math.max(parseFloat(body.gasGwei) || 25, 1), 999);
@@ -375,25 +444,28 @@ router.post('/tasks', taskLimiter, async (req, res) => {
     drop: String(body.drop || 'Unknown').slice(0, 120),
     dropId: String(body.dropId || '').slice(0, 64),
     openseaSlug: String(body.openseaSlug || '').slice(0, 120) || null,
-    contractAddress: String(body.contractAddress || '').slice(0, 66) || null,
-    chainSlug: String(body.chainSlug || 'ethereum').slice(0, 20),
+    contractAddress: validated.contractAddress,
+    chainSlug: validated.chainSlug,
     route: routes.normalizeRoute(body.route || routes.ROUTES.DIRECT_RPC),
     wallets: Math.min(Math.max(parseInt(body.wallets, 10) || 1, 1), 50),
     qty: Math.min(Math.max(parseInt(body.qty, 10) || 1, 1), 10),
     name: String(body.name || body.drop || 'Task').slice(0, 120),
     status: 'queued',
     time: new Date().toLocaleString(),
-    scheduledFor: body.scheduledFor || null,
-    scheduledAt: body.scheduledAt || null,
+    scheduledFor: validated.scheduledAt,
+    scheduledAt: validated.scheduledAt,
     gasPreset,
     gasGwei,
     rpcBlast: body.rpcBlast !== false,
     rpcPrewarm: body.rpcPrewarm !== false,
-    targetBlock: body.targetBlock != null ? parseInt(body.targetBlock, 10) : null,
+    targetBlock: validated.targetBlock,
     rpcCount: body.rpcCount || config.envRpcs.length,
     rpcUrls: (body.rpcUrls || []).filter(u => typeof u === 'string' && u.startsWith('https://')),
     createdAt: new Date().toISOString(),
+    executionApproved: false,
+    events: [],
   };
+  appendTaskEvent(task, 'created', `Queued for ${task.chainSlug} in ${task.targetBlock ? `block ${task.targetBlock}` : task.scheduledAt || 'manual mode'}`);
 
   s.tasks.unshift(task);
   store.appendLog(s, 'info', `Task queued: ${task.name}`);
@@ -410,6 +482,26 @@ router.post('/tasks', taskLimiter, async (req, res) => {
   }
 
   res.json({ task });
+});
+
+router.get('/tasks/:id/readiness', async (req, res) => {
+  const task = await resolveTask(req.params.id);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+  const wallets = await walletStore.loadWallets().catch(() => state().wallets);
+  res.json(readiness.summary(task, wallets));
+});
+
+router.post('/tasks/:id/confirm', async (req, res) => {
+  const task = await resolveTask(req.params.id);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+  if (task.status !== 'queued') return res.status(400).json({ error: `Task is ${task.status}` });
+  if (req.body?.confirm !== true) return res.status(400).json({ error: 'Set confirm: true to record explicit operator approval' });
+  task.executionApproved = true;
+  task.approvedAt = new Date().toISOString();
+  appendTaskEvent(task, 'operator_confirmed', 'Explicit confirmation recorded; external signer approval is still required.');
+  await taskStore.saveTask(task);
+  worker.save();
+  res.json({ ok: true, task });
 });
 
 router.post('/tasks/:id/prewarm', async (req, res) => {
@@ -436,7 +528,7 @@ function preflightTaskRow(task, wallets) {
   const urls = rpc.allRpcUrls(task.rpcUrls || [], chain);
   const warm = prewarm.taskWarmStatus(task, wallets);
   const need = warm.length || task.wallets || 1;
-  const keyed = wallets.filter(w => w.encryptedKey).length;
+  const signerCount = wallets.filter(w => w.signerType === 'external').length;
   return {
     id: task.id,
     name: task.name || task.drop,
@@ -448,10 +540,10 @@ function preflightTaskRow(task, wallets) {
     slug: !!task.openseaSlug,
     rpcOk: urls.length > 0,
     rpcCount: urls.length,
-    keysOk: keyed >= need,
+    externalSignerReady: false,
     warmed: warm.filter(w => w.ok).length,
     warm,
-    ready: urls.length > 0 && !!task.openseaSlug && keyed >= need && warm.length > 0 && warm.every(w => w.ok),
+    ready: false,
   };
 }
 
@@ -503,13 +595,31 @@ router.post('/tasks/:id/run', async (req, res) => {
     const task = await resolveTask(req.params.id, req.body?.task);
     if (!task) return res.status(404).json({ error: 'Task not found' });
     if (task.status !== 'queued') return res.status(400).json({ error: `Task is ${task.status}` });
+    const policy = productionPolicy.readPolicy();
+    let reservation = null;
 
     // Load wallets from Neon so this works on any Lambda
     const wallets = await walletStore.loadWallets().catch(() => state().wallets);
 
+    if (config.enableLiveMint) {
+      if (task.executionApproved !== true) return res.status(409).json({ error: 'Explicit operator confirmation is required before live execution.' });
+      productionPolicy.assertLiveReady(policy);
+      productionPolicy.assertTaskAllowed(task, policy);
+      productionPolicy.assertSignatureRequest(req.body?.signatureRequest, policy);
+      reservation = await policyStore.reserve({
+        approvalId: req.body.signatureRequest.approvalId,
+        idempotencyKey: req.body.signatureRequest.idempotencyKey,
+        taskId: task.id,
+        chain: task.chainSlug,
+        contractAddress: task.contractAddress,
+        valueWei: req.body.signatureRequest.valueWei || '0',
+      }, policy);
+    }
+
     // Mark running immediately
     task.status = 'running';
     task.startedAt = new Date().toISOString();
+    appendTaskEvent(task, 'run_requested', config.enableLiveMint ? 'Validated live request sent to signer boundary.' : 'Preflight run requested.');
     await taskStore.updateTaskStatus(task.id, 'running', { startedAt: task.startedAt });
 
     // Respond immediately so the UI shows "running" — then execute
@@ -527,11 +637,14 @@ router.post('/tasks/:id/run', async (req, res) => {
       if (!task.openseaSlug) throw new Error('Missing openseaSlug');
 
       // Pre-warm if not already done
-      const cached = wallets.filter(w => w.encryptedKey).slice(0, task.wallets || 1)
-        .every(w => prewarm.isReady(task.id, w.id));
+      const cached = false;
       if (!cached) await prewarm.prewarmTask(task, wallets, log);
 
       const result = await mint.runMintTask(task, wallets, log);
+      if (reservation) {
+        if (result.txHashes.length) await policyStore.settle(reservation.approvalId);
+        else await policyStore.release(reservation.approvalId, 'no_transaction_broadcast');
+      }
       // "broadcast" = tx in mempool (got hash); "failed" = no hash at all
       task.status = result.txHashes.length > 0 ? 'broadcast' : 'failed';
       task.minted = result.minted;
@@ -564,6 +677,7 @@ router.post('/tasks/:id/run', async (req, res) => {
         });
       }
     } catch (e) {
+      if (reservation) await policyStore.release(reservation.approvalId, 'execution_error').catch(() => {});
       task.status = 'failed';
       task.error = e.message;
       task.finishedAt = new Date().toISOString();
@@ -793,6 +907,15 @@ router.post('/copymint/scan', async (req, res) => {
     res.json({ ok: true, status: copymint.getStatus() });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/copymint/observe', taskLimiter, async (req, res) => {
+  try {
+    const result = await copymint.observePublicMint(req.body || {});
+    res.json(result);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
   }
 });
 

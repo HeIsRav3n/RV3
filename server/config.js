@@ -2,6 +2,7 @@
 
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+const { assertProductionConfig } = require('./config/validateProductionConfig');
 
 function pickRpc(name, role, chain = 'ethereum') {
   const url = (process.env[name] || '').trim();
@@ -16,17 +17,25 @@ function pickBuilder(name) {
 }
 
 const config = {
+  env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3000', 10),
   apiSecret: (process.env.API_SECRET || '').trim(),
+  bootstrapSecret: (process.env.RV3_BOOTSTRAP_SECRET || '').trim(),
+  bootstrapMode: String(process.env.RV3_BOOTSTRAP_MODE || 'disabled').toLowerCase() === 'enabled',
   openseaApiKey: (process.env.OPENSEA_API_KEY || '').trim(),
+  openseaGraphqlEnabled: String(process.env.OPENSEA_GRAPHQL_ENABLED || 'false').toLowerCase() === 'true',
+  eventProvider: (process.env.RV3_EVENT_PROVIDER || '').trim(),
+  theGraphApiKey: (process.env.THE_GRAPH_API_KEY || '').trim(),
+  theGraphEthereumSubgraph: (process.env.THE_GRAPH_ETHEREUM_SUBGRAPH_ID || '').trim(),
+  theGraphRobinhoodSubgraph: (process.env.THE_GRAPH_ROBINHOOD_SUBGRAPH_ID || '').trim(),
+  walletConnectProjectId: (process.env.WALLETCONNECT_PROJECT_ID || '').trim(),
+  publicUrl: (process.env.RV3_PUBLIC_URL || '').trim().replace(/\/$/, ''),
   etherscanApiKey: (process.env.ETHERSCAN_API_KEY || '').trim(),
   blurApiKey: (process.env.BLUR_API_KEY || '').trim(),
-  flashbotsAuthKey: (process.env.FLASHBOTS_AUTH_PRIVATE_KEY || '').trim(),
   discordWebhook: (process.env.DISCORD_WEBHOOK_URL || '').trim(),
   telegramToken: (process.env.TELEGRAM_BOT_TOKEN || '').trim(),
   telegramChatId: (process.env.TELEGRAM_CHAT_ID || '').trim(),
-  walletEncryptionKey: (process.env.WALLET_ENCRYPTION_KEY || '').trim(),
-  enableLiveMint: process.env.ENABLE_LIVE_MINT === 'true',
+  enableLiveMint: String(process.env.ENABLE_LIVE_MINT).toLowerCase() === 'true',
   taskRateLimit: parseInt(process.env.TASK_RATE_LIMIT_PER_MIN || '10', 10),
   dataDir: process.env.DATA_DIR || (process.env.VERCEL ? '/tmp' : path.join(__dirname, '..', 'data')),
   envRpcs: [
@@ -47,9 +56,12 @@ const config = {
   // env RPC above (dedup by chain+role happens right after).
   defaultRpcs: [
     { id: 'default_robinhood', name: 'Robinhood Chain (public)', role: 'Primary', url: 'https://rpc.mainnet.chain.robinhood.com', chain: 'robinhood', ms: null, active: true, fromEnv: false, isDefault: true },
+    { id: 'default_ethereum', name: 'Ethereum (public)', role: 'Primary', url: 'https://ethereum-rpc.publicnode.com', chain: 'ethereum', ms: null, active: true, fromEnv: false, isDefault: true },
     { id: 'default_base', name: 'Base (public)', role: 'Primary', url: 'https://mainnet.base.org', chain: 'base', ms: null, active: true, fromEnv: false, isDefault: true },
+    { id: 'default_base_publicnode', name: 'Base (public mirror)', role: 'Fallback', url: 'https://base-rpc.publicnode.com', chain: 'base', ms: null, active: true, fromEnv: false, isDefault: true },
     { id: 'default_blast', name: 'Blast (public)', role: 'Primary', url: 'https://rpc.blast.io', chain: 'blast', ms: null, active: true, fromEnv: false, isDefault: true },
-    { id: 'default_polygon', name: 'Polygon (public)', role: 'Primary', url: 'https://polygon-rpc.com', chain: 'polygon', ms: null, active: true, fromEnv: false, isDefault: true },
+    { id: 'default_polygon', name: 'Polygon (public)', role: 'Primary', url: 'https://polygon.drpc.org', chain: 'polygon', ms: null, active: true, fromEnv: false, isDefault: true },
+    { id: 'default_polygon_publicnode', name: 'Polygon (public mirror)', role: 'Fallback', url: 'https://polygon.publicnode.com', chain: 'polygon', ms: null, active: true, fromEnv: false, isDefault: true },
   ],
   builderRpcs: [
     pickBuilder('ETH_BUILDER_TITAN'),
@@ -67,6 +79,6 @@ for (const d of config.defaultRpcs) {
   if (!config.envRpcs.some(r => r.chain === d.chain)) config.envRpcs.push(d);
 }
 
-config.hasWalletEncryption = config.walletEncryptionKey.length === 64 && /^[0-9a-fA-F]+$/.test(config.walletEncryptionKey);
+assertProductionConfig(process.env, config);
 
 module.exports = config;

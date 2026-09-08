@@ -84,7 +84,6 @@ Update these variables:
 ```env
 # Generate these:
 API_SECRET=generate_long_random_string
-WALLET_ENCRYPTION_KEY=generate_64_char_hex
 
 # Get from APIs:
 OPENSEA_API_KEY=your_key
