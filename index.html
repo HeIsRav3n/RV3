@@ -464,64 +464,41 @@ code{background:var(--bg4);padding:1px 5px;border-radius:4px;font-size:11px;font
 .cl-detail-changes{font-size:12.5px;color:var(--text2);line-height:1.75}
 .cl-detail-changes li{margin-bottom:4px}
 .cl-detail-tag{display:inline-block;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;margin-right:4px;vertical-align:middle}
+/* OPERATOR ACCESS */
+.access-page{position:fixed;inset:0;display:grid;place-items:center;overflow:auto;background:radial-gradient(circle at 18% 18%,rgba(74,124,252,.17),transparent 33%),radial-gradient(circle at 85% 80%,rgba(15,207,133,.08),transparent 28%),var(--bg);z-index:9999}
+.access-shell{width:min(100%,980px);min-height:600px;margin:28px;padding:1px;border-radius:20px;background:linear-gradient(135deg,rgba(91,137,255,.48),rgba(255,255,255,.05) 38%,rgba(15,207,133,.25));box-shadow:0 28px 90px rgba(0,0,0,.5)}
+.access-card{min-height:598px;display:grid;grid-template-columns:1.08fr .92fr;border-radius:19px;overflow:hidden;background:var(--bg2)}
+.access-brief{display:flex;flex-direction:column;justify-content:space-between;padding:52px;background:linear-gradient(145deg,rgba(18,31,57,.94),rgba(13,20,34,.96));border-right:1px solid var(--border)}
+.access-brand{display:flex;align-items:center;gap:14px}.access-brand img{width:46px;height:46px;border-radius:12px;box-shadow:0 8px 28px rgba(74,124,252,.32)}.access-brand strong{display:block;font-size:18px;letter-spacing:-.3px}.access-brand span{display:block;margin-top:2px;font:10px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text3)}
+.access-title{margin:44px 0 12px;font-size:36px;line-height:1.08;letter-spacing:-1.4px}.access-copy{max-width:390px;margin:0;color:var(--text2);font-size:14px;line-height:1.7}.access-points{display:grid;gap:10px;margin-top:28px}.access-point{display:flex;gap:9px;align-items:center;color:var(--text2);font-size:12px}.access-point i{width:7px;height:7px;border-radius:99px;background:var(--green);box-shadow:0 0 0 4px rgba(15,207,133,.1)}.access-footer{font-size:10px;color:var(--text3);line-height:1.55}
+.access-form-wrap{display:flex;flex-direction:column;justify-content:center;padding:52px}.access-eyebrow{font:700 10px var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--accent3)}.access-form-wrap h2{margin:9px 0 7px;font-size:24px;letter-spacing:-.6px}.access-form-wrap>p{margin:0 0 28px;color:var(--text2);font-size:12px;line-height:1.6}.access-field{margin-bottom:17px}.access-field label{display:block;margin-bottom:7px;font-size:11px;font-weight:700;color:var(--text2);letter-spacing:.02em}.access-field input{width:100%;box-sizing:border-box;padding:12px 13px;font-size:14px}.access-password{position:relative}.access-password input{padding-right:54px}.access-toggle{position:absolute;right:8px;top:8px;padding:4px 7px;border:0;border-radius:5px;background:transparent;color:var(--accent3);font-size:11px;font-weight:700;cursor:pointer}.access-toggle:hover{background:rgba(74,124,252,.12)}.access-submit{width:100%;min-height:46px;font-size:14px;font-weight:700}.access-note{display:flex;gap:8px;margin-top:19px;padding:11px 12px;border:1px solid var(--border);border-radius:8px;color:var(--text3);font-size:10.5px;line-height:1.5}.access-note span{color:var(--green);font-size:12px}.access-error{margin-top:12px}
+@media(max-width:720px){.access-shell{margin:14px}.access-card{min-height:0;grid-template-columns:1fr}.access-brief{display:none}.access-form-wrap{min-height:calc(100vh - 30px);padding:36px 27px}}
 </style>
 </head>
 <body>
 
 <!-- LOGIN PAGE -->
-<div id="loginPage" role="main" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);z-index:9999">
-  <div style="width:100%;max-width:420px;padding:40px 20px">
-    <div style="text-align:center;margin-bottom:40px">
-      <img src="/assets/rv3-logo.png" alt="RV3" style="width:80px;height:80px;margin-bottom:20px;border-radius:12px;box-shadow:0 8px 24px rgba(74,124,252,.2)">
-      <h1 style="font-size:32px;font-weight:800;color:var(--text);margin:0 0 8px;letter-spacing:-0.5px">RV3</h1>
-      <p style="font-size:13px;color:var(--text2);margin:0">Command · War room · Preflight</p>
-      <p style="font-size:11px;color:var(--text3);margin:8px 0 0">v2.6.0 · Secure access required</p>
-    </div>
-
-    <div id="loginForm" style="display:block">
-      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:28px;margin-bottom:12px">
-        <div class="fg" style="margin-bottom:14px">
-          <label class="fl" for="login-email">Email Address</label>
-          <input class="fi" id="login-email" type="email" placeholder="your@email.com" autocomplete="email" style="font-size:14px;padding:11px 13px">
-        </div>
-        <div class="fg" style="margin-bottom:20px">
-          <label class="fl" for="login-password">Password</label>
-          <input class="fi" id="login-password" type="password" placeholder="••••••••" autocomplete="current-password" style="font-size:14px;padding:11px 13px">
-          <div style="font-size:10px;color:var(--text3);margin-top:5px">Minimum 8 characters</div>
-        </div>
-        <button class="btn btn-p" style="width:100%;padding:12px;font-size:14px;font-weight:600" onclick="handleLogin()">Sign In</button>
-        <div style="text-align:center;margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
-          <span style="font-size:12px;color:var(--text2)">New user? </span>
-          <span style="color:var(--accent3);cursor:pointer;font-weight:600;font-size:12px" onclick="showRegister()">Create account</span>
-        </div>
-      </div>
-      <div id="loginError" style="display:none" class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt" id="loginErrorMsg" style="font-size:12px"></div></div>
-    </div>
-
-    <div id="registerForm" style="display:none">
-      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:28px;margin-bottom:12px">
-        <div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
-          <span style="color:var(--accent3);font-size:13px;cursor:pointer;font-weight:600" onclick="showLogin()">← Back to sign in</span>
-        </div>
-        <div class="fg" style="margin-bottom:14px">
-          <label class="fl" for="reg-email">Email Address</label>
-          <input class="fi" id="reg-email" type="email" placeholder="your@email.com" autocomplete="email" style="font-size:14px;padding:11px 13px">
-        </div>
-        <div class="fg" style="margin-bottom:14px">
-          <label class="fl" for="reg-password">Password</label>
-          <input class="fi" id="reg-password" type="password" placeholder="••••••••" autocomplete="new-password" style="font-size:14px;padding:11px 13px">
-          <div style="font-size:10px;color:var(--text3);margin-top:5px">Minimum 8 characters</div>
-        </div>
-        <div class="fg" style="margin-bottom:20px">
-          <label class="fl" for="reg-password-confirm">Confirm Password</label>
-          <input class="fi" id="reg-password-confirm" type="password" placeholder="••••••••" autocomplete="new-password" style="font-size:14px;padding:11px 13px">
-        </div>
-        <button class="btn btn-p" style="width:100%;padding:12px;font-size:14px;font-weight:600" onclick="handleRegister()">Create Account</button>
-      </div>
-      <div id="registerError" style="display:none" class="ban ban-w"><div class="ban-ico">⚠</div><div class="ban-txt" id="registerErrorMsg" style="font-size:12px"></div></div>
-    </div>
-
-  </div>
+<div id="loginPage" role="main" class="access-page">
+  <div class="access-shell"><div class="access-card">
+    <section class="access-brief" aria-label="RV3 access overview">
+      <div><div class="access-brand"><img src="/assets/rv3-logo.png" alt="RV3"><div><strong>RV3</strong><span>Operator console</span></div></div>
+        <h1 class="access-title">Mint operations,<br>under control.</h1>
+        <p class="access-copy">A focused command center for discovery, wallet readiness, and reviewed preflight operations.</p>
+        <div class="access-points"><div class="access-point"><i></i>Cookie-only authenticated session</div><div class="access-point"><i></i>Passwords protected with Argon2id</div><div class="access-point"><i></i>No private keys accepted or stored</div></div></div>
+      <div class="access-footer">RV3 v2.6.0<br>Operator access is provisioned through the secure bootstrap procedure.</div>
+    </section>
+    <section class="access-form-wrap" id="loginForm" aria-labelledby="access-heading">
+      <div class="access-eyebrow">Secure session</div><h2 id="access-heading">Sign in to RV3</h2>
+      <p>Use the operator account created during setup. There is no shared default password.</p>
+      <form onsubmit="handleLogin(event);return false;" novalidate>
+        <div class="access-field"><label for="login-email">Email address</label><input class="fi" id="login-email" type="email" placeholder="operator@example.com" autocomplete="email" inputmode="email" required></div>
+        <div class="access-field"><label for="login-password">Password</label><div class="access-password"><input class="fi" id="login-password" type="password" placeholder="Enter your password" autocomplete="current-password" required><button class="access-toggle" type="button" aria-controls="login-password" aria-pressed="false" onclick="toggleLoginPassword(this)">Show</button></div></div>
+        <button id="login-submit" class="btn btn-p access-submit" type="submit">Secure sign in</button>
+      </form>
+      <div class="access-note"><span>●</span><div>New accounts are not created from this screen in production. Use the one-time bootstrap procedure to provision the first operator.</div></div>
+      <div id="loginError" style="display:none" class="ban ban-w access-error" role="alert"><div class="ban-ico">⚠</div><div class="ban-txt" id="loginErrorMsg" style="font-size:12px"></div></div>
+    </section>
+  </div></div>
 </div>
 
 <!-- SIDEBAR -->
@@ -3022,7 +2999,7 @@ async function handleLogout() {
   // Clear state cache on logout (keep RPCs/settings)
   localStorage.removeItem('rv3_state');
   S.wallets = []; S.drops = []; S.tasks = []; S.history = [];
-  document.getElementById('loginPage').style.display = 'flex';
+  document.getElementById('loginPage').style.display = 'grid';
   document.getElementById('sidebar').style.display = 'none';
   document.getElementById('main').style.display = 'none';
   document.getElementById('login-email').value = '';
@@ -4347,7 +4324,7 @@ function renderGuide() {
       body: `<h4>Key handling</h4>
 <p>RV3 never accepts, stores, or transmits signing material. Use a dedicated external signer and approve each transaction only after reviewing the chain, target, amount, and fee limits.</p>
 <h4>Auth</h4>
-<p>Sessions are stored in Neon PostgreSQL (production) or a local JSON file (development). Passwords are hashed with SHA-256 + API secret. Sessions expire after 7 days and are purged on logout.</p>
+<p>Sessions are stored in Neon PostgreSQL (production) or a local JSON file (development). Passwords are protected with Argon2id; legacy SHA-256 hashes are upgraded after a successful login. Sessions expire after 7 days and are purged on logout.</p>
 <h4>Protections</h4>
 <ul>
   <li>All user input is sanitized before rendering — XSS is not possible through form fields or URL params</li>
@@ -4430,17 +4407,18 @@ function guideToggle(id) {
 
 // LOGIN HANDLERS
 function showLogin() {
-  document.getElementById('loginForm').style.display = 'block';
-  document.getElementById('registerForm').style.display = 'none';
+  document.getElementById('loginForm').style.display = 'flex';
   document.getElementById('loginError').style.display = 'none';
   document.getElementById('login-email').focus();
 }
 
-function showRegister() {
-  document.getElementById('loginForm').style.display = 'none';
-  document.getElementById('registerForm').style.display = 'block';
-  document.getElementById('registerError').style.display = 'none';
-  document.getElementById('reg-email').focus();
+function toggleLoginPassword(button) {
+  const input = document.getElementById('login-password');
+  if (!input) return;
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  button.textContent = showing ? 'Show' : 'Hide';
+  button.setAttribute('aria-pressed', String(!showing));
 }
 
 function showLoginError(msg) {
@@ -4457,30 +4435,20 @@ function showRegisterError(msg) {
   if (err) err.style.display = 'block';
 }
 
-async function handleLogin() {
+async function handleLogin(event) {
+  event?.preventDefault();
   const email = document.getElementById('login-email')?.value?.trim();
   const password = document.getElementById('login-password')?.value;
   if (!email || !password) { showLoginError('Email and password required'); return; }
+  const submit = document.getElementById('login-submit');
   try {
+    if (submit) { submit.disabled = true; submit.textContent = 'Signing in…'; }
     await RV3_Auth.login(email, password);
     showApp();
   } catch (e) {
     showLoginError(e.message || 'Login failed');
-  }
-}
-
-async function handleRegister() {
-  const email = document.getElementById('reg-email')?.value?.trim();
-  const password = document.getElementById('reg-password')?.value;
-  const confirm = document.getElementById('reg-password-confirm')?.value;
-  if (!email || !password || !confirm) { showRegisterError('All fields required'); return; }
-  if (password !== confirm) { showRegisterError('Passwords do not match'); return; }
-  if (password.length < 8) { showRegisterError('Password must be at least 8 characters'); return; }
-  try {
-    await RV3_Auth.register(email, password);
-    showApp();
-  } catch (e) {
-    showRegisterError(e.message || 'Registration failed');
+  } finally {
+    if (submit) { submit.disabled = false; submit.textContent = 'Secure sign in'; }
   }
 }
 
@@ -4526,7 +4494,7 @@ async function checkAuth() {
     if (verified) {
       showApp();
     } else {
-      document.getElementById('loginPage').style.display = 'flex';
+      document.getElementById('loginPage').style.display = 'grid';
       document.getElementById('sidebar').style.display = 'none';
       document.getElementById('main').style.display = 'none';
       showLogin();
@@ -4595,10 +4563,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if(e.key === 'Enter' && document.getElementById('taskModal').classList.contains('show')) {
       if(document.activeElement?.id !== 'm-taskname') mSubmit();
     }
-    if(e.key === 'Enter' && document.getElementById('loginPage').style.display !== 'none') {
-      if(document.getElementById('loginForm').style.display !== 'none') handleLogin();
-      else if(document.getElementById('registerForm').style.display !== 'none') handleRegister();
-    }
+    if(e.key === 'Enter' && document.getElementById('loginPage').style.display !== 'none') handleLogin(e);
   });
 async function saveCard(data) {
   if (data && typeof renderPnl === 'function') {
