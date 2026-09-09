@@ -9,7 +9,8 @@
     "dev": "node --watch server/index.js",
     "compile:contracts": "node scripts/compile-contracts.js",
     "import:legacy-env": "node scripts/import-legacy-env.js",
-    "test": "node --test test/authSecurity.test.js test/config/validateProductionConfig.test.js test/copymint.test.js test/legacyEnvImport.test.js test/nonCustodial.test.js test/openseaIntegration.test.js test/policyStore.test.js test/productionPolicy.test.js test/readiness.test.js test/rpcAllowlist.test.js test/theGraph.test.js test/walletConnectSigner.test.js test/workerLease.test.js",
+    "check:staging": "node scripts/staging-readiness.js",
+    "test": "node --test test/authSecurity.test.js test/config/validateProductionConfig.test.js test/copymint.test.js test/legacyEnvImport.test.js test/nonCustodial.test.js test/openseaIntegration.test.js test/policyStore.test.js test/productionPolicy.test.js test/readiness.test.js test/rpcAllowlist.test.js test/stagingReadiness.test.js test/theGraph.test.js test/walletConnectSigner.test.js test/workerLease.test.js",
     "test:config": "node --test test/config/validateProductionConfig.test.js"
   },
   "engines": {
