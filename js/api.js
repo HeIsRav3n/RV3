@@ -75,6 +75,11 @@ const RV3_API = {
     return this.request('/wallets');
   },
 
+  async inspectWallet(address, chain = 'ethereum') {
+    const query = new URLSearchParams({ address, chain });
+    return this.request(`/wallets/inspect?${query}`);
+  },
+
   async portfolio(chain, minBalance) {
     const qs = new URLSearchParams({ chain: chain || 'ethereum' });
     if (minBalance != null) qs.set('minBalance', String(minBalance));

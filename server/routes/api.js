@@ -27,6 +27,7 @@ const theGraph = require('../services/theGraph');
 const readiness = require('../services/readiness');
 const db = require('../db');
 const walletConnectSigner = require('../services/walletConnectSigner');
+const walletObservation = require('../services/walletObservation');
 
 const router = express.Router();
 
@@ -482,6 +483,20 @@ router.post('/tasks', taskLimiter, async (req, res) => {
   }
 
   res.json({ task });
+});
+
+// Read-only wallet inspection. The address is sufficient for balance and
+// pending-nonce checks; private keys are rejected and never stored.
+router.get('/wallets/inspect', async (req, res) => {
+  try {
+    if (req.query?.privateKey || req.query?.encryptedKey) {
+      return res.status(400).json({ error: 'Private keys are not accepted by RV3.' });
+    }
+    const observation = await walletObservation.inspect(req.query?.address, req.query?.chain || 'ethereum');
+    res.json({ wallet: observation });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
 router.get('/tasks/:id/readiness', async (req, res) => {
