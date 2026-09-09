@@ -16,6 +16,15 @@ function pickBuilder(name) {
   return { id: name.toLowerCase(), name: name.replace(/ETH_BUILDER_/g, '').replace(/_/g, ' '), url };
 }
 
+function resolveLiveMint(env = process.env) {
+  // Vercel functions are ephemeral and cannot safely own a long-lived worker,
+  // WalletConnect session, or transaction execution state. Keep the deployed
+  // dashboard usable for discovery and preflight, but never allow it to become
+  // a live execution host through an environment-variable accident.
+  if (env.VERCEL) return false;
+  return String(env.ENABLE_LIVE_MINT).toLowerCase() === 'true';
+}
+
 const config = {
   env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3000', 10),
@@ -35,7 +44,8 @@ const config = {
   discordWebhook: (process.env.DISCORD_WEBHOOK_URL || '').trim(),
   telegramToken: (process.env.TELEGRAM_BOT_TOKEN || '').trim(),
   telegramChatId: (process.env.TELEGRAM_CHAT_ID || '').trim(),
-  enableLiveMint: String(process.env.ENABLE_LIVE_MINT).toLowerCase() === 'true',
+  serverless: Boolean(process.env.VERCEL),
+  enableLiveMint: resolveLiveMint(process.env),
   taskRateLimit: parseInt(process.env.TASK_RATE_LIMIT_PER_MIN || '10', 10),
   dataDir: process.env.DATA_DIR || (process.env.VERCEL ? '/tmp' : path.join(__dirname, '..', 'data')),
   envRpcs: [
@@ -81,4 +91,4 @@ for (const d of config.defaultRpcs) {
 
 assertProductionConfig(process.env, config);
 
-module.exports = config;
+module.exports = { ...config, resolveLiveMint };

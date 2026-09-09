@@ -49,7 +49,10 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-worker.start();
+// A Vercel function is an on-demand request handler, not a durable worker.
+// The UI, discovery, and preflight routes remain available there; background
+// scheduling and any future live execution require a persistent Node host.
+if (!config.serverless) worker.start();
 
 if (require.main === module) {
   app.listen(config.port, () => {

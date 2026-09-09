@@ -1,5 +1,10 @@
 # Deploy RV3 to Vercel (Alternative - More Complex)
 
+> **Runtime scope:** Vercel hosts RV3's dashboard, OpenSea discovery, and
+> preflight checks only. RV3 automatically disables the background worker and
+> live mint execution on Vercel because serverless instances are ephemeral.
+> Use a persistent Node host for any future reviewed live-execution workflow.
+
 ⚠️ **Note**: Vercel is serverless and requires significant changes. **Railway is recommended instead** (see DEPLOY_RAILWAY.md).
 
 If you must use Vercel, this guide converts RV3 to serverless architecture.
